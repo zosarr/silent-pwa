@@ -31,6 +31,46 @@ function escapeHtml(s){return s.replace(/[&<>\"']/g,m=>({"&":"&amp;","<":"&lt;",
 function setStatus(s){const map=STRINGS[els.langSelect.value]; addMsg(map[`status_${s}`]||s,'server');}
 
 (async()=>{ const myPubB64=await e2e.init(); els.myPub.value=myPubB64; })();
+// === QR Code Generation ===
+document.getElementById('showQrBtn').addEventListener('click', () => {
+  const key = els.myPub.value.trim();
+  if (!key) return alert("Chiave pubblica mancante");
+  const qrDiv = document.getElementById('qrContainer');
+  qrDiv.innerHTML = "";
+  new QRCode(qrDiv, { text: key, width: 200, height: 200 });
+  qrDiv.style.display = "block";
+});
+
+// === QR Code Scanning ===
+document.getElementById('scanQrBtn').addEventListener('click', async () => {
+  const video = document.getElementById('qrVideo');
+  video.style.display = "block";
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+  video.srcObject = stream;
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  function scanFrame() {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imgData.data, imgData.width, imgData.height);
+      if (code) {
+        els.peerPub.value = code.data;
+        stream.getTracks().forEach(track => track.stop());
+        video.style.display = "none";
+        alert("Chiave pubblica importata dal QR!");
+        return;
+      }
+    }
+    requestAnimationFrame(scanFrame);
+  }
+  requestAnimationFrame(scanFrame);
+});
+
 
 els.startSessionBtn.addEventListener('click',async()=>{
   const base64=els.peerPub.value.trim(); if(!base64) return alert('Incolla la chiave pubblica del peer');
