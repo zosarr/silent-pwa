@@ -81,6 +81,8 @@ els.startSessionBtn.addEventListener('click',async()=>{
 els.connectBtn.addEventListener('click',()=>{
   const url=els.wsUrl.value.trim(); if(!url) return;
   ws=new WebSocket(url);
+  ws.onerror = (ev)=>{ addMsg('WS error (vedi console): ' + (ev?.message||''), 'server'); };
+  ws.onclose = (ev)=>{ addMsg(`WS chiuso: code=${ev.code} reason=${ev.reason||''}`, 'server'); setStatus('disconnected'); };
   ws.onopen=()=>{ setStatus('connected'); sendJson({type:'pubkey', pub: els.myPub.value}); };
   ws.onmessage=async ev=>{
     try{
