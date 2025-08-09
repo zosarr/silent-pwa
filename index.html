@@ -44,6 +44,13 @@
             <span data-i18n="myPub">Mia chiave pubblica (base64)</span>
             <textarea id="myPub" readonly></textarea>
           </label>
+          <div class="row">
+  <button id="showQrBtn">Mostra QR</button>
+  <button id="scanQrBtn">Scansiona QR</button>
+</div>
+
+<div id="qrContainer" style="margin-top:10px; display:none;"></div>
+<video id="qrVideo" style="width:100%; display:none;" autoplay></video>
           <label>
             <span data-i18n="peerPub">Chiave pubblica del peer (incolla)</span>
             <textarea id="peerPub" placeholder="Incolla la chiave pubblica dell'altro utente"></textarea>
