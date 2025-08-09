@@ -26,15 +26,14 @@
   </header>
 
   <main>
-    <section class="panel">
+<section class="panel">
   <h2 data-i18n="connection">Connessione</h2>
 
-  <label>
-    <span>WebSocket URL (connessione automatica)</span>
-    <input id="wsUrl" value="wss://silent-backend.onrender.com/ws?room=test" readonly/>
-  </label>
+  <!-- Box stato -->
+  <div id="connStatus" class="status-box disconnected">
+    Non connesso
+  </div>
 
- 
   <details>
     <summary data-i18n="session">Sessione crittografica</summary>
     <div class="grid2">
@@ -58,6 +57,8 @@
     </div>
   </details>
 </section>
+
+    
     <section class="panel">
       <h2 data-i18n="chat">Chat</h2>
       <ul id="log" class="messages" aria-live="polite"></ul>
