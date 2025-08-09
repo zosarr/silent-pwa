@@ -1,15 +1,17 @@
 import {E2E} from './crypto.js';
 import {STRINGS, applyLang} from './i18n.js';
 
+// === CONFIG: imposta qui il tuo WS ===
+const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test'; // assicurati sia onrender.com
+
 let ws = null;
 let e2e = new E2E();
 let isConnecting = false;
 let isConnected = false;
+let reconnectTimer = null;
 
 const els = {
   wsUrl: document.getElementById('wsUrl'),
-  connectBtn: document.getElementById('connectBtn'),
-  disconnectBtn: document.getElementById('disconnectBtn'),
   log: document.getElementById('log'),
   input: document.getElementById('msgInput'),
   sendBtn: document.getElementById('sendBtn'),
@@ -41,7 +43,6 @@ els.installBtn.addEventListener('click', async ()=>{
   els.installBtn.style.display = 'none';
 });
 if ('serviceWorker' in navigator) {
-  // bump cache version nel sw quando cambi (vedi sw.js)
   navigator.serviceWorker.register('./sw.js');
 }
 
@@ -74,7 +75,6 @@ els.copyMyPubBtn.addEventListener('click', async ()=>{
     await navigator.clipboard.writeText(key);
     addMsg('Chiave copiata negli appunti ✅', 'server');
   } catch {
-    // fallback
     els.myPub.select();
     document.execCommand('copy');
     addMsg('Chiave copiata (fallback) ✅', 'server');
@@ -94,34 +94,25 @@ els.startSessionBtn.addEventListener('click', async ()=>{
   }
 });
 
-// Connect (anti-duplicati)
-els.connectBtn.addEventListener('click', ()=>{
-  const url = els.wsUrl.value.trim();
-  if(!url) return alert('URL WebSocket vuoto');
-  if(!/^wss?:\/\//i.test(url)) return alert('L’URL deve iniziare con ws:// o wss://');
-
-  // evita connessioni multiple
+// Auto-connect on load + reconnect
+function connect(url){
   if (isConnected || isConnecting) return;
-
-  // chiudi eventuale socket precedente ancora aperto
+  // chiudi eventuale socket precedente
   if (ws && (ws.readyState === 0 || ws.readyState === 1)) {
     try { ws.close(1000, 'reconnect'); } catch {}
   }
-
   try {
     isConnecting = true;
-    els.connectBtn.disabled = true;
-
     ws = new WebSocket(url);
 
-    ws.onopen = () => {
-      isConnecting = false;
-      isConnected = true;
+    ws.onopen = ()=>{
+      clearTimeout(reconnectTimer); reconnectTimer = null;
+      isConnecting = false; isConnected = true;
       setStatus('connected');
       sendJson({type:'pubkey', pub: els.myPub.value});
     };
 
-    ws.onmessage = async (ev) => {
+    ws.onmessage = async (ev)=>{
       try {
         const data = JSON.parse(ev.data);
         if (data.type === 'pubkey' && data.pub) {
@@ -134,40 +125,53 @@ els.connectBtn.addEventListener('click', ()=>{
           const plain = await e2e.decrypt(data.iv, data.ct);
           addMsg(plain, 'other');
         } else if (typeof data === 'string') {
-          addMsg(data, 'other'); // fallback (echo server)
+          addMsg(data, 'other');
         }
       } catch {
         addMsg(ev.data, 'other');
       }
     };
 
-    ws.onerror = (ev) => {
+    ws.onerror = (ev)=> {
       console.error('WS error', ev);
       addMsg('Errore WebSocket (vedi console).', 'server');
     };
 
-    ws.onclose = (ev) => {
-      isConnected = false;
-      isConnecting = false;
-      els.connectBtn.disabled = false;
+    ws.onclose = ()=>{
+      isConnected = false; isConnecting = false;
       setStatus('disconnected');
+      scheduleReconnect();
     };
-
   } catch (e) {
     isConnecting = false;
-    els.connectBtn.disabled = false;
-    alert('Errore creando WebSocket: ' + e.message);
+    console.error('New WebSocket exception', e);
+    scheduleReconnect();
   }
+}
+
+function scheduleReconnect(delay=4000){
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(()=>{
+    reconnectTimer = null;
+    connect(getWsUrl());
+  }, delay);
+}
+
+function getWsUrl(){
+  // permette override via query string: ?ws=wss://.../ws?room=xyz
+  const params = new URLSearchParams(location.search);
+  const override = params.get('ws');
+  const url = (override && /^wss?:\/\//i.test(override)) ? override : AUTO_WS_URL;
+  if (els.wsUrl) els.wsUrl.value = url;
+  return url;
+}
+
+// avvia connessione automatica quando la pagina è pronta
+window.addEventListener('load', ()=> {
+  connect(getWsUrl());
 });
 
-// Disconnect
-els.disconnectBtn.addEventListener('click', ()=>{
-  if (ws && (ws.readyState === 0 || ws.readyState === 1)) {
-    ws.close(1000, 'manual');
-  }
-});
-
-// Send encrypted message
+// invio messaggi cifrati
 els.sendBtn.addEventListener('click', async ()=>{
   const text = els.input.value.trim();
   if(!text) return;
@@ -186,5 +190,5 @@ function sendJson(obj){
   }
 }
 
-// Clear chat
+// pulisci chat
 els.clearBtn.addEventListener('click', ()=>{ els.log.innerHTML = ''; });
