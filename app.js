@@ -1,8 +1,8 @@
 import {E2E} from './crypto.js';
 import {STRINGS, applyLang} from './i18n.js';
 
-// === CONFIG: imposta qui il tuo WS ===
-const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test'; // assicurati sia onrender.com
+// === CONFIG: imposta qui il tuo WS (puoi sovrascrivere con ?ws=...) ===
+const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
 
 let ws = null;
 let e2e = new E2E();
@@ -11,7 +11,6 @@ let isConnected = false;
 let reconnectTimer = null;
 
 const els = {
-  wsUrl: document.getElementById('wsUrl'),
   log: document.getElementById('log'),
   input: document.getElementById('msgInput'),
   sendBtn: document.getElementById('sendBtn'),
@@ -100,7 +99,7 @@ els.startSessionBtn.addEventListener('click', async ()=>{
   if(!base64) return alert('Incolla la chiave pubblica del peer');
   try{
     await e2e.setPeerPublicKey(base64);
-    setStatus('ready');
+    setStatus('ready'); // NON rimuovere
     sendJson({type:'pubkey', pub: els.myPub.value});
   }catch(err){
     alert('Errore sessione: ' + err.message);
@@ -110,7 +109,7 @@ els.startSessionBtn.addEventListener('click', async ()=>{
 // Auto-connect on load + reconnect
 function connect(url){
   if (isConnected || isConnecting) return;
-  // chiudi eventuale socket precedente
+
   if (ws && (ws.readyState === 0 || ws.readyState === 1)) {
     try { ws.close(1000, 'reconnect'); } catch {}
   }
@@ -121,7 +120,7 @@ function connect(url){
     ws.onopen = ()=>{
       clearTimeout(reconnectTimer); reconnectTimer = null;
       isConnecting = false; isConnected = true;
-      setStatus('connected');
+      setStatus('connected'); // solo box, niente chat
       sendJson({type:'pubkey', pub: els.myPub.value});
     };
 
@@ -134,7 +133,7 @@ function connect(url){
             catch(ex){ console.warn('Peer pubkey error', ex); }
           }
         } else if (data.type === 'msg' && data.iv && data.ct) {
-          if (!e2e.ready) { addMsg('[Encrypted] In attesa chiave…'); return; }
+          if (!e2e.ready) { /* niente messaggi di stato in chat */ return; }
           const plain = await e2e.decrypt(data.iv, data.ct);
           addMsg(plain, 'other');
         } else if (typeof data === 'string') {
@@ -145,9 +144,9 @@ function connect(url){
       }
     };
 
-    ws.onerror = (ev)=> {
-      console.error('WS error', ev);
-      addMsg('Errore WebSocket (vedi console).', 'server');
+    ws.onerror = ()=>{
+      // niente addMsg di errore in chat; aggiorniamo solo lo stato
+      setStatus('disconnected');
     };
 
     ws.onclose = ()=>{
@@ -157,7 +156,7 @@ function connect(url){
     };
   } catch (e) {
     isConnecting = false;
-    console.error('New WebSocket exception', e);
+    setStatus('disconnected');
     scheduleReconnect();
   }
 }
@@ -171,11 +170,10 @@ function scheduleReconnect(delay=4000){
 }
 
 function getWsUrl(){
-  // permette override via query string: ?ws=wss://.../ws?room=xyz
+  // override via query string: ?ws=wss://.../ws?room=xyz
   const params = new URLSearchParams(location.search);
   const override = params.get('ws');
   const url = (override && /^wss?:\/\//i.test(override)) ? override : AUTO_WS_URL;
-  if (els.wsUrl) els.wsUrl.value = url;
   return url;
 }
 
