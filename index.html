@@ -27,40 +27,39 @@
 
   <main>
     <section class="panel">
-      <h2 data-i18n="connection">Connessione</h2>
+  <h2 data-i18n="connection">Connessione</h2>
+
+  <label>
+    <span>WebSocket URL (connessione automatica)</span>
+    <input id="wsUrl" value="wss://silent-backend.onrender.com/ws?room=test" readonly/>
+  </label>
+
+  <!-- niente bottoni Connetti/Disconnetti -->
+  <small>La connessione parte in automatico quando apri la pagina. Se vuoi cambiare stanza, modifica l’URL nel codice.</small>
+
+  <details>
+    <summary data-i18n="session">Sessione crittografica</summary>
+    <div class="grid2">
       <label>
-        <span>WebSocket URL</span>
-        <input id="wsUrl" value="wss://silent-backend.onrender.com/ws?room=test"/>
-      </label>
-      <div class="row">
-        <button id="connectBtn" data-i18n="connect">Connetti</button>
-        <button id="disconnectBtn" class="ghost" data-i18n="disconnect">Disconnetti</button>
-      </div>
-
-      <details>
-        <summary data-i18n="session">Sessione crittografica</summary>
-        <div class="grid2">
-          <label>
-            <span data-i18n="myPub">Mia chiave pubblica (base64)</span>
-            <textarea id="myPub" readonly></textarea>
-            <div class="row">
-              <button id="copyMyPubBtn">Copia chiave</button>
-            </div>
-          </label>
-
-          <label>
-            <span data-i18n="peerPub">Chiave pubblica del peer (incolla)</span>
-            <textarea id="peerPub" placeholder="Incolla la chiave pubblica dell'altro utente"></textarea>
-          </label>
-        </div>
-
+        <span data-i18n="myPub">Mia chiave pubblica (base64)</span>
+        <textarea id="myPub" readonly></textarea>
         <div class="row">
-          <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
-          <small data-i18n="sessionHint">Scambia la chiave pubblica con il tuo interlocutore. La chat si attiva quando entrambe le parti avviano la sessione.</small>
+          <button id="copyMyPubBtn">Copia chiave</button>
         </div>
-      </details>
-    </section>
+      </label>
 
+      <label>
+        <span data-i18n="peerPub">Chiave pubblica del peer (incolla)</span>
+        <textarea id="peerPub" placeholder="Incolla la chiave pubblica dell'altro utente"></textarea>
+      </label>
+    </div>
+
+    <div class="row">
+      <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
+      <small data-i18n="sessionHint">Scambia la chiave pubblica con il tuo interlocutore. La chat si attiva quando entrambe le parti avviano la sessione.</small>
+    </div>
+  </details>
+</section>
     <section class="panel">
       <h2 data-i18n="chat">Chat</h2>
       <ul id="log" class="messages" aria-live="polite"></ul>
