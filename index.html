@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Silent PWA</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0d0d0f"/>
+  <link rel="icon" href="icons/maskable-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <img src="icons/maskable-192.png" alt="Silent" width="32" height="32">
+      <h1>Silent</h1>
+    </div>
+    <div class="actions">
+      <select id="langSelect" aria-label="Language">
+        <option value="it">Italiano</option>
+        <option value="en">English</option>
+      </select>
+      <button id="installBtn" class="ghost">Install</button>
+      <button id="clearBtn" class="danger" data-i18n="clear">Pulisci</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2 data-i18n="connection">Connessione</h2>
+      <label>
+        <span>WebSocket URL</span>
+        <input id="wsUrl" value="wss://silent-backend.onrender.com/ws?room=test"/>
+      </label>
+      <div class="row">
+        <button id="connectBtn" data-i18n="connect">Connetti</button>
+        <button id="disconnectBtn" class="ghost" data-i18n="disconnect">Disconnetti</button>
+      </div>
+
+      <details>
+        <summary data-i18n="session">Sessione crittografica</summary>
+        <div class="grid2">
+          <label>
+            <span data-i18n="myPub">Mia chiave pubblica (base64)</span>
+            <textarea id="myPub" readonly></textarea>
+          </label>
+          <label>
+            <span data-i18n="peerPub">Chiave pubblica del peer (incolla)</span>
+            <textarea id="peerPub" placeholder="Incolla la chiave pubblica dell'altro utente"></textarea>
+          </label>
+        </div>
+        <div class="row">
+          <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
+          <small data-i18n="sessionHint">Scambia la chiave pubblica con il tuo interlocutore. La chat si attiva quando entrambe le parti avviano la sessione.</small>
+        </div>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2 data-i18n="chat">Chat</h2>
+      <ul id="log" class="messages" aria-live="polite"></ul>
+      <div class="composer">
+        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
+        <button id="sendBtn" data-i18n="send">Invia</button>
+      </div>
+      <small data-i18n="autodestruct">I messaggi si autodistruggono 5 minuti dopo la lettura.</small>
+    </section>
+  </main>
+
+  <footer>
+    <span>Silent PWA demo • E2E con WebCrypto • <a href="#" id="aboutLink">Info</a></span>
+  </footer>
+
+  <dialog id="aboutDialog">
+    <h3>Silent PWA (demo)</h3>
+    <p data-i18n="about">
+      Demo di chat con WebSocket e cifratura end-to-end (ECDH + AES-GCM).
+      Pensata per backend che inoltra i messaggi senza leggerli.
+    </p>
+    <button id="closeAbout">OK</button>
+  </dialog>
+
+  <script type="module" src="i18n.js"></script>
+  <script type="module" src="crypto.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
+
