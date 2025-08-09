@@ -57,8 +57,21 @@ function addMsg(text, kind='server'){
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m])); }
 function setStatus(labelKey){
-  const map = STRINGS[els.langSelect.value];
-  addMsg(map[`status_${labelKey}`] || labelKey, 'server');
+  const box = document.getElementById('connStatus');
+  if (!box) return;
+  if (labelKey === 'connected') {
+    box.textContent = 'Connesso';
+    box.classList.remove('disconnected');
+    box.classList.add('connected');
+  } else if (labelKey === 'disconnected') {
+    box.textContent = 'Non connesso';
+    box.classList.remove('connected');
+    box.classList.add('disconnected');
+  } else if (labelKey === 'ready') {
+    box.textContent = 'Sessione pronta';
+    box.classList.remove('disconnected');
+    box.classList.add('connected');
+  }
 }
 
 // E2E init
