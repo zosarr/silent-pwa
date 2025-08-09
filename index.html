@@ -1,12 +1,22 @@
 <!doctype html>
 <html lang="it">
 <head>
+  <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               connect-src 'self' wss://silent-backend.onrender.com https://silent-backend.onrender.com;
+               img-src 'self' data: blob:;
+               script-src 'self' https://cdn.jsdelivr.net https://cdn.jsdelivr.net/npm 'unsafe-inline';
+               style-src 'self' 'unsafe-inline';
+               font-src 'self' data:;
+               manifest-src 'self';
+               worker-src 'self';
+               object-src 'none'">
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Silent PWA</title>
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#0d0d0f"/>
-  <link rel="icon" href="icons/2.png">
+  <link rel="icon" href="icons/1.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
