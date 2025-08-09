@@ -1,4 +1,4 @@
-const CACHE = 'silent-pwa-v1';
+const CACHE = 'silent-pwa-v3'; // <--- versione nuova
 const ASSETS = [
   './','./index.html','./styles.css','./app.js','./crypto.js','./i18n.js',
   './manifest.webmanifest','./icons/maskable-192.png','./icons/maskable-512.png'
