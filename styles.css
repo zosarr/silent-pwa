@@ -37,6 +37,7 @@ button.danger{border-color:#b86b6b;background:#fff3f3}
 }
 .msg{padding:10px 12px;border:1px solid rgba(0,0,0,.08);background:#ffffff;border-radius:12px;max-width:70%}
 .me{align-self:flex-end;background:#fff7ef;border-color:#e8c9a3}
+.msg.other {background-color: #d1f7c4; /* verde chiaro */}
 .meta{font-size:12px;color:#666;margin-top:6px}
 .composer{display:flex;gap:8px;margin-top:10px}
 a{color:#6d4e34}
