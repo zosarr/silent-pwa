@@ -1,28 +1,18 @@
 <!doctype html>
 <html lang="it">
 <head>
-  <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self';
-               connect-src 'self' wss://silent-backend.onrender.com https://silent-backend.onrender.com;
-               img-src 'self' data: blob:;
-               script-src 'self' https://cdn.jsdelivr.net https://cdn.jsdelivr.net/npm 'unsafe-inline';
-               style-src 'self' 'unsafe-inline';
-               font-src 'self' data:;
-               manifest-src 'self';
-               worker-src 'self';
-               object-src 'none'">
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Silent PWA</title>
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#0d0d0f"/>
-  <link rel="icon" href="icons/1.png">
+  <link rel="icon" href="icons/maskable-192.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <div class="brand">
-      <img src="icons/1.png" alt="Silent" width="32" height="32">
+      <img src="icons/maskable-192.png" alt="Silent" width="32" height="32">
       <h1>Silent</h1>
     </div>
     <div class="actions">
@@ -40,7 +30,7 @@
       <h2 data-i18n="connection">Connessione</h2>
       <label>
         <span>WebSocket URL</span>
-        <input id="wsUrl" value="wss://silent-backend.onrender.com/ws?room=test"/>
+        <input id="wsUrl" value="wss://<TUO_BACKEND>.onrender.com/ws?room=test"/>
       </label>
       <div class="row">
         <button id="connectBtn" data-i18n="connect">Connetti</button>
@@ -53,19 +43,17 @@
           <label>
             <span data-i18n="myPub">Mia chiave pubblica (base64)</span>
             <textarea id="myPub" readonly></textarea>
+            <div class="row">
+              <button id="copyMyPubBtn">Copia chiave</button>
+            </div>
           </label>
-          <div class="row">
-  <button id="showQrBtn">Mostra QR</button>
-  <button id="scanQrBtn">Scansiona QR</button>
-</div>
 
-<div id="qrContainer" style="margin-top:10px; display:none;"></div>
-<video id="qrVideo" style="width:100%; display:none;" autoplay></video>
           <label>
             <span data-i18n="peerPub">Chiave pubblica del peer (incolla)</span>
             <textarea id="peerPub" placeholder="Incolla la chiave pubblica dell'altro utente"></textarea>
           </label>
         </div>
+
         <div class="row">
           <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
           <small data-i18n="sessionHint">Scambia la chiave pubblica con il tuo interlocutore. La chat si attiva quando entrambe le parti avviano la sessione.</small>
@@ -85,23 +73,11 @@
   </main>
 
   <footer>
-    <span>Silent PWA demo • E2E con WebCrypto • <a href="#" id="aboutLink">Info</a></span>
+    <span>Silent PWA • E2E con WebCrypto</span>
   </footer>
-
-  <dialog id="aboutDialog">
-    <h3>Silent PWA (demo)</h3>
-    <p data-i18n="about">
-      Demo di chat con WebSocket e cifratura end-to-end (ECDH + AES-GCM).
-      Pensata per backend che inoltra i messaggi senza leggerli.
-    </p>
-    <button id="closeAbout">OK</button>
-  </dialog>
 
   <script type="module" src="i18n.js"></script>
   <script type="module" src="crypto.js"></script>
   <script type="module" src="app.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
 </body>
 </html>
-
