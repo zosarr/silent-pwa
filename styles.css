@@ -42,3 +42,17 @@ button.danger{border-color:#b86b6b;background:#fff3f3}
 .composer{display:flex;gap:8px;margin-top:10px}
 a{color:#6d4e34}
 dialog{border-radius:12px;border:1px solid rgba(0,0,0,.1);background:#fff;color:#1b1b1b}
+.status-box {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: bold;
+  text-align: center;
+  color: white;
+}
+.status-box.connected {
+  background-color: #4caf50; /* verde */
+}
+.status-box.disconnected {
+  background-color: #f44336; /* rosso */
+}
+
