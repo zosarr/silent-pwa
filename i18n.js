@@ -7,7 +7,7 @@ export const STRINGS = {
        status_waiting_key:"Connesso: in attesa della chiave del peer",status_ready:"Sessione E2E attiva"},
   en: {connection:"Connection",connect:"Connect",disconnect:"Disconnect",session:"Key exchange",
        myPub:"My key",peerPub:"User key (paste)",startSession:"Start session",
-       sessionHint:Press the button to exchange the key and activate the chat,
+       sessionHint:"Press the button to exchange the key and activate the chat",
        chat:"Chat",send:"Send",autodestruct:"Messages self-destruct 5 minutes after being read.",
        clear:"Clear",status_connected:"Connected",status_disconnected:"Disconnected",
        status_waiting_key:"Connected: waiting for peer key",status_ready:"E2E session active"}
