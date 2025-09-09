@@ -27,4 +27,18 @@ export class E2E {
     const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv}, this.sharedKey, ct);
     return new TextDecoder().decode(pt);
   }
+    async encryptBytes(buffer){ // buffer: ArrayBuffer
+    if(!this.sharedKey) throw new Error("No shared key");
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({name:"AES-GCM", iv}, this.sharedKey, buffer);
+    return { iv, ct }; // Uint8Array/ArrayBuffer
+  }
+
+  async decryptBytes(iv, ct){ // iv: Uint8Array / ArrayBuffer, ct: ArrayBuffer
+    if(!this.sharedKey) throw new Error("No shared key");
+    const ivU8 = iv instanceof Uint8Array ? iv : new Uint8Array(iv);
+    const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv: ivU8}, this.sharedKey, ct);
+    return pt; // ArrayBuffer
+  }
+
 }
