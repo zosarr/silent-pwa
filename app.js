@@ -27,6 +27,8 @@ const els = {
   installBtn: document.getElementById('installBtn'),
   langSelect: document.getElementById('langSelect'),
   copyMyPubBtn: document.getElementById('copyMyPubBtn'),
+  
+
 
   // Immagini
   imgInput: document.getElementById('imgInput'),
@@ -41,6 +43,10 @@ const els = {
   stopRecBtn: document.getElementById('stopRecBtn'),
   recTimer: document.getElementById('recTimer'),
 };
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
 
 // ====== i18n ======
 const preferred = (navigator.language || 'it').startsWith('it') ? 'it' : 'en';
@@ -52,19 +58,31 @@ if (els.langSelect) {
 
 // ====== PWA install ======
 let deferredPrompt = null;
+
+function refreshInstallBtnVisibility(){
+  if (!els.installBtn) return;
+  els.installBtn.style.display = isStandalone() ? 'none' : 'inline-block';
+}
+window.addEventListener('appinstalled', refreshInstallBtnVisibility);
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault(); deferredPrompt = e;
-  if (els.installBtn) els.installBtn.style.display = 'inline-block';
+  refreshInstallBtnVisibility(); // mostra il bottone
 });
 on(els.installBtn, 'click', async () => {
-  if (!deferredPrompt) return;
-  deferredPrompt.prompt();
-  await deferredPrompt.userChoice;
-  els.installBtn.style.display = 'none';
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+  }
+  refreshInstallBtnVisibility();
 });
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js');
 }
+// mostra lo stato corretto anche se il prompt non è ancora arrivato
+refreshInstallBtnVisibility();
+
 
 // ====== UI helpers ======
 function addMsg(text, kind = 'server') {
@@ -149,10 +167,14 @@ on(els.startSessionBtn, 'click', async () => {
     await e2e.setPeerPublicKey(base64);
     setStatus('ready');
     sendJson({ type: 'pubkey', pub: els.myPub?.value || '' });
+
+    // 👇 CHIUDI il pannello (resta riapribile toccando il <summary>)
+    document.getElementById('keysPanel')?.removeAttribute('open');
   } catch (err) {
     alert('Errore sessione: ' + err.message);
   }
 });
+
 
 // ====== WebSocket ======
 function connect(url) {
