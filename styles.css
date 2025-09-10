@@ -57,5 +57,11 @@ dialog{border-radius:12px;border:1px solid rgba(0,0,0,.1);background:#fff;color:
 }
 .msg img { max-width: 100%; height: auto; display: block; border-radius: 8px; border:1px solid rgba(0,0,0,.08); margin:4px 0; }
 dialog { border-radius: 12px; border: 1px solid rgba(0,0,0,.1); padding: 12px; }
+/* Player audio dentro i messaggi */
+.msg audio {
+  width: 100%;
+  margin: 4px 0;
+  outline: none;
+}
 
 
