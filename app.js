@@ -10,8 +10,9 @@ let e2e = new E2E();
 let isConnecting = false;
 let isConnected = false;
 let reconnectTimer = null;
+let pingTimer = null;
 
-// Shortcut per aggiungere listener senza rompere se l'elemento non esiste
+// Shortcut per listener "sicuri" (non esplode se l'elemento manca)
 function on(el, ev, fn) { if (el) el.addEventListener(ev, fn); }
 
 // Riferimenti UI
@@ -41,7 +42,7 @@ const els = {
   recTimer: document.getElementById('recTimer'),
 };
 
-// i18n
+// ====== i18n ======
 const preferred = (navigator.language || 'it').startsWith('it') ? 'it' : 'en';
 if (els.langSelect) {
   els.langSelect.value = preferred;
@@ -49,7 +50,7 @@ if (els.langSelect) {
   on(els.langSelect, 'change', e => applyLang(e.target.value));
 }
 
-// PWA install
+// ====== PWA install ======
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault(); deferredPrompt = e;
@@ -65,7 +66,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js');
 }
 
-// ---------- UI helpers ----------
+// ====== UI helpers ======
 function addMsg(text, kind = 'server') {
   if (!els.log) return;
   const li = document.createElement('li');
@@ -126,7 +127,7 @@ function setStatus(labelKey) {
   }
 }
 
-// ---------- E2E ----------
+// ====== E2E ======
 (async () => {
   const myPubB64 = await e2e.init();
   if (els.myPub) els.myPub.value = myPubB64;
@@ -137,9 +138,7 @@ on(els.copyMyPubBtn, 'click', async () => {
   const key = els.myPub.value.trim();
   if (!key) return;
   try { await navigator.clipboard.writeText(key); addMsg('Chiave copiata ✅', 'server'); }
-  catch {
-    els.myPub.select(); document.execCommand('copy'); addMsg('Chiave copiata (fallback) ✅', 'server');
-  }
+  catch { els.myPub.select(); document.execCommand('copy'); addMsg('Chiave copiata (fallback) ✅', 'server'); }
 });
 
 on(els.startSessionBtn, 'click', async () => {
@@ -155,7 +154,7 @@ on(els.startSessionBtn, 'click', async () => {
   }
 });
 
-// ---------- WebSocket ----------
+// ====== WebSocket ======
 function connect(url) {
   if (isConnected || isConnecting) return;
 
@@ -172,10 +171,18 @@ function connect(url) {
       isConnecting = false; isConnected = true;
       setStatus('connected');
       sendJson({ type: 'pubkey', pub: els.myPub?.value || '' });
+
+      // Keepalive ping (riduce chiusure per idle)
+      if (pingTimer) clearInterval(pingTimer);
+      pingTimer = setInterval(() => {
+        if (ws && ws.readyState === 1) {
+          try { ws.send(JSON.stringify({ type: 'ping', t: Date.now() })); } catch {}
+        }
+      }, 25000);
     };
 
     ws.onmessage = async (ev) => {
-      // Binario: prova prima immagini (SIMG), poi audio (SAUD)
+      // Binario: prova immagini (SIMG), poi audio (SAUD)
       if (ev.data instanceof ArrayBuffer) {
         try {
           const simg = parseImagePacket(ev.data);
@@ -188,7 +195,15 @@ function connect(url) {
           const saud = parseAudioPacket(ev.data);
           if (saud && e2e.ready) {
             const ptAb = await e2e.decryptBytes(saud.iv, saud.ct);
-            const blob = new Blob([ptAb], { type: saud.mime || 'audio/webm' });
+            let mime = saud.mime || 'audio/webm;codecs=opus';
+            let blob;
+            if (canPlayMime(mime)) {
+              blob = new Blob([ptAb], { type: mime });
+            } else {
+              // Fallback universale: decodifica e ricodifica in WAV
+              blob = await decodeToWavBlob(ptAb);
+              mime = 'audio/wav';
+            }
             addAudioFromBlob(blob, 'other');
             return;
           }
@@ -196,9 +211,10 @@ function connect(url) {
         return;
       }
 
-      // Testo JSON (pubkey/msg)
+      // Testo JSON (pubkey/msg/ping)
       try {
         const data = JSON.parse(ev.data);
+        if (data.type === 'ping') return; // ignora keepalive
         if (data.type === 'pubkey' && data.pub) {
           if (!e2e.ready) {
             try { await e2e.setPeerPublicKey(data.pub); setStatus('ready'); } catch { }
@@ -216,7 +232,12 @@ function connect(url) {
     };
 
     ws.onerror = () => setStatus('disconnected');
-    ws.onclose = () => { isConnected = false; isConnecting = false; setStatus('disconnected'); scheduleReconnect(); };
+    ws.onclose = () => {
+      isConnected = false; isConnecting = false;
+      setStatus('disconnected');
+      if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+      scheduleReconnect();
+    };
 
   } catch (e) {
     isConnecting = false;
@@ -224,6 +245,7 @@ function connect(url) {
     scheduleReconnect();
   }
 }
+
 function scheduleReconnect(delay = 4000) {
   if (reconnectTimer) return;
   reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(getWsUrl()); }, delay);
@@ -236,11 +258,19 @@ function getWsUrl() {
 }
 window.addEventListener('load', () => connect(getWsUrl()));
 
+// Avviso su chiusura/refresh se connessi o in registrazione
+window.addEventListener('beforeunload', (e) => {
+  if (isConnected || (typeof mediaRecorder !== 'undefined' && mediaRecorder && mediaRecorder.state === 'recording')) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
 function sendJson(obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
 
-// ---------- Invio testo ----------
+// ====== Invio testo ======
 on(els.sendBtn, 'click', async () => {
   if (!els.input) return;
   const text = els.input.value.trim();
@@ -253,7 +283,7 @@ on(els.sendBtn, 'click', async () => {
   els.input.value = '';
 });
 
-// ---------- Immagini ----------
+// ====== Immagini ======
 let _pendingImage = null;
 
 on(els.sendImgBtn, 'click', () => els.imgInput && els.imgInput.click());
@@ -298,7 +328,7 @@ on(els.confirmSendImg, 'click', async () => {
   }
 });
 
-// ---------- Audio ----------
+// ====== Audio ======
 let mediaStream = null;
 let mediaRecorder = null;
 let recChunks = [];
@@ -389,11 +419,9 @@ on(els.recBtn, 'click', async () => {
   }
 });
 
-on(els.stopRecBtn, 'click', () => {
-  try { mediaRecorder && mediaRecorder.stop(); } catch { }
-});
+on(els.stopRecBtn, 'click', () => { try { mediaRecorder && mediaRecorder.stop(); } catch { } });
 
-// ---------- Utils binari ----------
+// ====== Utils binari comuni ======
 function utf8(s) { return new TextEncoder().encode(s); }
 function concatU8(...arrays) {
   let len = arrays.reduce((a, b) => a + b.length, 0);
@@ -444,12 +472,10 @@ function buildAudioPacket(ivU8, mimeStr, durationMs, cipherU8) {
   const mimeU8 = utf8(mimeStr || '');
   const mimeLen = new Uint8Array([mimeU8.length]);
   const dur = new Uint8Array([
-    (durationMs >>> 24) & 0xff, (durationMs >>> 16) & 0xff,
-    (durationMs >>> 8) & 0xff, durationMs & 0xff
+    (durationMs >>> 24) & 0xff, (durationMs >>> 16) & 0xff, (durationMs >>> 8) & 0xff, durationMs & 0xff
   ]);
   const payLen = new Uint8Array([
-    (cipherU8.length >>> 24) & 0xff, (cipherU8.length >>> 16) & 0xff,
-    (cipherU8.length >>> 8) & 0xff, cipherU8.length & 0xff
+    (cipherU8.length >>> 24) & 0xff, (cipherU8.length >>> 16) & 0xff, (cipherU8.length >>> 8) & 0xff, cipherU8.length & 0xff
   ]);
   return concatU8(magic, ver, ivLen, mimeLen, dur, payLen, ivU8, mimeU8, cipherU8).buffer;
 }
@@ -469,7 +495,7 @@ function parseAudioPacket(ab) {
   return { iv, mime, durMs, ct };
 }
 
-// ---------- Util per immagini ----------
+// ====== Utils per immagini ======
 async function compressImageToBlob(file, maxSide = 1280, quality = 0.8) {
   const img = await new Promise((res, rej) => {
     const fr = new FileReader();
@@ -490,5 +516,63 @@ async function compressImageToBlob(file, maxSide = 1280, quality = 0.8) {
   return blob;
 }
 
-// Pulisci chat
+// ====== Utils audio: compatibilità MIME + fallback WAV ======
+function canPlayMime(mime) {
+  try { return !!new Audio().canPlayType(mime); } catch { return false; }
+}
+function encodeWavFromAudioBuffer(audioBuffer) {
+  const numCh = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const samples = audioBuffer.length;
+
+  // interleave (se stereo)
+  let pcm;
+  if (numCh === 2) {
+    const L = audioBuffer.getChannelData(0), R = audioBuffer.getChannelData(1);
+    pcm = new Float32Array(samples * 2);
+    for (let i = 0, j = 0; i < samples; i++, j += 2) { pcm[j] = L[i]; pcm[j + 1] = R[i]; }
+  } else {
+    pcm = audioBuffer.getChannelData(0);
+  }
+
+  const bytesPerSample = 2;
+  const blockAlign = (numCh) * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + pcm.length * bytesPerSample);
+  const view = new DataView(buffer);
+
+  const writeString = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+  let offset = 0;
+  writeString(offset, 'RIFF'); offset += 4;
+  view.setUint32(offset, 36 + pcm.length * bytesPerSample, true); offset += 4;
+  writeString(offset, 'WAVE'); offset += 4;
+  writeString(offset, 'fmt '); offset += 4;
+  view.setUint32(offset, 16, true); offset += 4;           // Subchunk1Size
+  view.setUint16(offset, 1, true); offset += 2;            // AudioFormat PCM
+  view.setUint16(offset, numCh, true); offset += 2;        // NumChannels
+  view.setUint32(offset, sampleRate, true); offset += 4;   // SampleRate
+  view.setUint32(offset, sampleRate * blockAlign, true); offset += 4; // ByteRate
+  view.setUint16(offset, blockAlign, true); offset += 2;   // BlockAlign
+  view.setUint16(offset, 16, true); offset += 2;           // BitsPerSample
+  writeString(offset, 'data'); offset += 4;
+  view.setUint32(offset, pcm.length * bytesPerSample, true); offset += 4;
+
+  // float32 -> int16
+  let idx = offset;
+  const clamp = (v) => Math.max(-1, Math.min(1, v));
+  for (let i = 0; i < pcm.length; i++) {
+    view.setInt16(idx, clamp(pcm[i]) * 0x7FFF, true);
+    idx += 2;
+  }
+  return new Blob([view], { type: 'audio/wav' });
+}
+async function decodeToWavBlob(arrayBuffer) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+  return encodeWavFromAudioBuffer(audioBuffer);
+}
+
+// ====== Pulisci chat ======
 on(els.clearBtn, 'click', () => { if (els.log) els.log.innerHTML = ''; });
+
+// ====== Avvio connessione ======
+window.addEventListener('load', () => connect(getWsUrl()));
