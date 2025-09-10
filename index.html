@@ -1,98 +1,97 @@
 <!doctype html>
 <html lang="it">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Silent</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0d0d0f"/>
-  <link rel="icon" href="icons/1.png">
-  <link rel="stylesheet" href="styles.css">
+
+  <!-- Manifest + icon (aggiorna i percorsi se li usi) -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icons/icon-192.png" sizes="192x192">
+  <meta name="theme-color" content="#ffffff"/>
+
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header>
+  <header class="topbar">
     <div class="brand">
-      <img src="icons/1.png" alt="Silent" width="32" height="32">
+      <span class="logo">🔕</span>
       <h1>Silent</h1>
     </div>
-    <div class="actions">
-      <select id="langSelect" aria-label="Language">
-        <option value="it">Italiano</option>
-        <option value="en">English</option>
+
+    <div class="top-actions">
+      <div id="connStatus" class="status disconnected">Non connesso</div>
+      <select id="langSelect" aria-label="Lingua">
+        <option value="it">IT</option>
+        <option value="en">EN</option>
       </select>
-      <button id="installBtn" class="ghost">Install</button>
-      <button id="clearBtn" class="danger" data-i18n="clear">Pulisci</button>
+      <button id="installBtn" class="ghost" style="display:none;">Install</button>
     </div>
   </header>
 
-  <main>
-<section class="panel">
-  <h2 data-i18n="connection">Connessione</h2>
+  <main class="layout">
+    <!-- Pannello scambio chiavi -->
+    <section class="card">
+      <h2 data-i18n="keyExchange">Scambio chiavi</h2>
 
-  <!-- Box stato -->
-  <div id="connStatus" class="status-box disconnected">
-    Non connesso
-  </div>
+      <div class="grid2">
+        <label>
+          <span data-i18n="myPub">La mia chiave</span>
+          <textarea id="myPub" readonly></textarea>
+        </label>
 
-  <details>
-    <summary data-i18n="session">Scambio chiavi</summary>
-    <div class="grid2">
-      <label>
-        <span data-i18n="myPub">La mia chiave</span>
-        <textarea id="myPub" readonly></textarea>
-        <div class="row">
-          <button id="copyMyPubBtn">Copia chiave</button>
-        </div>
-      </label>
-
-     <label>
-    <span data-i18n="peerPub">Chiave utente (incolla)</span>
-    <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
-</label>
-
-    </div>
-
-    <div class="row">
-      <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
-      <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
-    </div>
-  </details>
-</section>
-
-    
-    <section class="panel">
-      <h2 data-i18n="chat">Chat</h2>
-      <ul id="log" class="messages" aria-live="polite"></ul>
-      <div class="composer">
-        <!-- Pulsanti registrazione audio -->
-<button id="recBtn" title="Registra audio">🎙️</button>
-<button id="stopRecBtn" title="Stop" style="display:none">⏹️</button>
-<small id="recTimer" style="min-width:60px; text-align:center; display:none">00:00</small>
-
-        <input id="imgInput" type="file" accept="image/*" style="display:none"/>
-    <button id="sendImgBtn" title="Invia immagine">📷</button>
-
-        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
-        <button id="sendBtn" data-i18n="send">Invia</button>
+        <label>
+          <span data-i18n="peerPub">Chiave utente (incolla)</span>
+          <textarea id="peerPub" placeholder="Incolla la chiave pubblica dell’altro utente"></textarea>
+        </label>
       </div>
-      <small data-i18n="autodestruct">I messaggi si autodistruggono 5 minuti dopo la lettura.</small>
+
+      <div class="row">
+        <button id="copyMyPubBtn" class="secondary" data-i18n="copyKey">Copia chiave</button>
+        <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
+      </div>
+      <small class="hint">Dopo lo scambio chiavi vedrai “Sessione pronta”.</small>
+    </section>
+
+    <!-- Chat -->
+    <section class="card chat">
+      <h2 data-i18n="chat">Chat</h2>
+
+      <ul id="log" class="log" aria-live="polite" aria-relevant="additions"></ul>
+
+      <div class="composer">
+        <!-- audio controls -->
+        <button id="recBtn" title="Registra audio" aria-label="Registra audio">🎙️</button>
+        <button id="stopRecBtn" title="Stop" aria-label="Stop registrazione" style="display:none">⏹️</button>
+        <small id="recTimer" style="min-width:60px; text-align:center; display:none">00:00</small>
+
+        <!-- text -->
+        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off" />
+        <button id="sendBtn" data-i18n="send">Invia</button>
+
+        <!-- image -->
+        <input id="imgInput" type="file" accept="image/*" style="display:none" />
+        <button id="sendImgBtn" title="Invia immagine" aria-label="Invia immagine">📷</button>
+
+        <!-- clear -->
+        <button id="clearBtn" class="ghost" data-i18n="clear">Pulisci chat</button>
+      </div>
     </section>
   </main>
-<dialog id="imgPreviewDlg">
-  <h3>Anteprima immagine</h3>
-  <img id="imgPreview" alt="Anteprima" style="max-width:100%;height:auto;border-radius:8px;border:1px solid #ddd"/>
-  <div class="row" style="margin-top:10px">
-    <button id="confirmSendImg">Invia</button>
-    <button id="cancelSendImg" class="ghost">Annulla</button>
-  </div>
-</dialog>
 
-  <footer>
-    <span>Silent • E2E con WebCrypto</span>
-  </footer>
+  <!-- Dialog anteprima immagine -->
+  <dialog id="imgPreviewDlg">
+    <h3>Anteprima immagine</h3>
+    <img id="imgPreview" alt="Anteprima" style="max-width:100%;height:auto;border-radius:8px;border:1px solid #ddd"/>
+    <div class="row" style="margin-top:10px">
+      <button id="confirmSendImg">Invia</button>
+      <button id="cancelSendImg" class="ghost">Annulla</button>
+    </div>
+  </dialog>
 
-  <script type="module" src="i18n.js"></script>
-  <script type="module" src="crypto.js"></script>
-  <script type="module" src="app.js"></script>
+  <!-- Script (ESM) -->
+  <script type="module" src="./i18n.js"></script>
+  <script type="module" src="./crypto.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
