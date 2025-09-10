@@ -182,3 +182,43 @@ dialog{
   width: calc(100% - 24px);
 }
 dialog::backdrop{ background: rgba(0,0,0,.25); }
+/* Composer "agganciato" in basso alla card chat (evita che sparisca con la tastiera) */
+.card.chat { display: flex; flex-direction: column; }
+.card.chat .log { flex: 1 1 auto; min-height: 35vh; }
+.card.chat .composer {
+  position: sticky;
+  bottom: 0;
+  background: var(--card);
+  padding-top: 10px;
+}
+
+/* Bottoni icona piccoli (mic/camera) */
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  line-height: 1;
+  font-size: 18px; /* evita l'emoji enorme */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Timer registrazione allineato e discreto */
+.rec-timer {
+  min-width: 48px;
+  text-align: center;
+  display: none;           /* viene mostrato da JS in registrazione */
+  color: var(--muted);
+}
+
+/* Griglia della composer su mobile: mic, stop, timer, camera, input (1fr), invia, pulisci */
+.composer{
+  display:grid;
+  grid-template-columns: auto auto auto auto 1fr auto auto;
+  gap:8px; align-items:center;
+}
+@media (max-width: 640px){
+  .composer{ grid-template-columns: auto auto auto auto 1fr auto auto; }
+}
+
