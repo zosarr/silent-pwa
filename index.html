@@ -2,13 +2,15 @@
 <html lang="it">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+ <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content" />
+
   <title>Silent</title>
 
-  <!-- Manifest + icon (aggiorna i percorsi se li usi) -->
-  <link rel="manifest" href="./manifest.json">
-  <link rel="icon" href="./icons/icon-192.png" sizes="192x192">
-  <meta name="theme-color" content="#ffffff"/>
+ <link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/silent-512.png" sizes="192x192">
+<link rel="apple-touch-icon" href="./icons/silent-512.png">
+<meta name="theme-color" content="#ffffff"/>
+
 
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -31,27 +33,29 @@
 
   <main class="layout">
     <!-- Pannello scambio chiavi -->
-    <section class="card">
-      <h2 data-i18n="keyExchange">Scambio chiavi</h2>
+  
+<details class="card" id="keysPanel" open>
+  <summary><h2 data-i18n="keyExchange" style="display:inline">Scambio chiavi</h2></summary>
 
-      <div class="grid2">
-        <label>
-          <span data-i18n="myPub">La mia chiave</span>
-          <textarea id="myPub" readonly></textarea>
-        </label>
+  <div class="grid2" style="margin-top:12px">
+    <label>
+      <span data-i18n="myPub">La mia chiave</span>
+      <textarea id="myPub" readonly></textarea>
+    </label>
 
-        <label>
-          <span data-i18n="peerPub">Chiave utente (incolla)</span>
-          <textarea id="peerPub" placeholder="Incolla la chiave pubblica dell’altro utente"></textarea>
-        </label>
-      </div>
+    <label>
+      <span data-i18n="peerPub">Chiave utente (incolla)</span>
+      <textarea id="peerPub" placeholder="Incolla la chiave pubblica dell’altro utente"></textarea>
+    </label>
+  </div>
 
-      <div class="row">
-        <button id="copyMyPubBtn" class="secondary" data-i18n="copyKey">Copia chiave</button>
-        <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
-      </div>
-      <small class="hint">Dopo lo scambio chiavi vedrai “Sessione pronta”.</small>
-    </section>
+  <div class="row">
+    <button id="copyMyPubBtn" class="secondary" data-i18n="copyKey">Copia chiave</button>
+    <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
+  </div>
+  <small class="hint">Dopo lo scambio chiavi vedrai “Sessione pronta”.</small>
+</details>
+
 
     <!-- Chat -->
     <section class="card chat">
@@ -60,22 +64,21 @@
       <ul id="log" class="log" aria-live="polite" aria-relevant="additions"></ul>
 
       <div class="composer">
-        <!-- audio controls -->
-        <button id="recBtn" title="Registra audio" aria-label="Registra audio">🎙️</button>
-        <button id="stopRecBtn" title="Stop" aria-label="Stop registrazione" style="display:none">⏹️</button>
-        <small id="recTimer" style="min-width:60px; text-align:center; display:none">00:00</small>
+  <!-- audio -->
+  <button id="recBtn" class="icon-btn" title="Registra audio" aria-label="Registra audio">🎙️</button>
+  <button id="stopRecBtn" class="icon-btn" title="Stop" aria-label="Stop registrazione" style="display:none">⏹️</button>
+  <small id="recTimer" class="rec-timer">00:00</small>
 
-        <!-- text -->
-        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off" />
-        <button id="sendBtn" data-i18n="send">Invia</button>
+  <!-- image -->
+  <input id="imgInput" type="file" accept="image/*" style="display:none" />
+  <button id="sendImgBtn" class="icon-btn" title="Invia immagine" aria-label="Invia immagine">📷</button>
 
-        <!-- image -->
-        <input id="imgInput" type="file" accept="image/*" style="display:none" />
-        <button id="sendImgBtn" title="Invia immagine" aria-label="Invia immagine">📷</button>
+  <!-- text + invio + clear -->
+  <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off" />
+  <button id="sendBtn" data-i18n="send">Invia</button>
+  <button id="clearBtn" class="ghost" data-i18n="clear">Pulisci</button>
+</div>
 
-        <!-- clear -->
-        <button id="clearBtn" class="ghost" data-i18n="clear">Pulisci chat</button>
-      </div>
     </section>
   </main>
 
