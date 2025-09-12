@@ -4,102 +4,79 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Silent</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0d0d0f"/>
-<link rel="stylesheet" href="styles.css">
 
- <link rel="icon" href="1.png">
+  <!-- 🔹 Icone corrette -->
+  <link rel="icon" href="1.png">
   <link rel="icon" href="2.png">
   <link rel="icon" href="2.phg">
-  <!-- richiesto: 2.phg; manteniamo anche questo riferimento in caso sia presente -->
-  <link rel="icon" href="2.phg">
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0d0d0f"/>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <div class="brand">
-      <img src="icons/1.png" alt="Silent" width="32" height="32">
-      <h1>Silent</h1>
+      <img src="1.png" alt="Silent" width="32" height="32">
+      <strong>Silent</strong>
     </div>
-    <div class="actions">
-      <select id="langSelect" aria-label="Language">
+    <div class="right">
+      <select id="langSelect">
         <option value="it">Italiano</option>
         <option value="en">English</option>
       </select>
-      <button id="installBtn" class="ghost">Install</button>
-      <button id="clearBtn" class="danger" data-i18n="clear">Pulisci</button>
+      <button id="installBtn" hidden>Install</button>
     </div>
   </header>
 
   <main>
-<section class="panel">
-  <h2 data-i18n="connection">Connessione</h2>
+    <section class="card">
+      <h2 data-i18n="connection"></h2>
+      <div class="row">
+        <input id="wsUrl" placeholder="wss://your-backend/ws?room=test" />
+        <button id="connectBtn" data-i18n="connect"></button>
+        <button id="disconnectBtn" data-i18n="disconnect" disabled></button>
+      </div>
+    </section>
 
-  <!-- Box stato -->
-  <div id="connStatus" class="status-box disconnected">
-    Non connesso
-  </div>
-
-  <details>
-    <summary data-i18n="session">Scambio chiavi</summary>
-    <div class="grid2">
-      <label>
-        <span data-i18n="myPub">La mia chiave</span>
+    <section class="card">
+      <h2 data-i18n="session"></h2>
+      <p class="muted" data-i18n="sessionHint"></p>
+      <div class="row">
+        <label data-i18n="myPub"></label>
         <textarea id="myPub" readonly></textarea>
-        <div class="row">
-          <button id="copyMyPubBtn">Copia chiave</button>
-        </div>
-      </label>
+        <button id="copyMyPubBtn">Copy</button>
+      </div>
+      <div class="row">
+        <label data-i18n="peerPub"></label>
+        <textarea id="peerPub"></textarea>
+      </div>
+      <button id="startSessionBtn" data-i18n="startSession"></button>
+      <div id="status" class="muted"></div>
+    </section>
 
-     <label>
-    <span data-i18n="peerPub">Chiave utente (incolla)</span>
-    <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
-</label>
+    <section class="card">
+      <h2 data-i18n="chat"></h2>
+      <div id="log" class="log"></div>
 
-    </div>
+      <!-- 🔹 NUOVA TOOLBAR -->
+      <div class="toolbar">
+        <button id="cameraBtn" class="icon-btn" title="Fotocamera" aria-label="Fotocamera">📷</button>
+        <button id="micBtn" class="icon-btn" title="Microfono" aria-label="Microfono">🎤</button>
+      </div>
 
-    <div class="row">
-      <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
-      <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
-    </div>
-  </details>
-</section>
-<section class="card">
-  <h2 data-i18n="chat"></h2>
-  <div id="log" class="log"></div>
-
-  <!-- 🔹 NUOVA TOOLBAR con fotocamera e microfono -->
-  <div class="toolbar">
-    <button id="cameraBtn" class="icon-btn" title="Fotocamera" aria-label="Fotocamera">📷</button>
-    <button id="micBtn" class="icon-btn" title="Microfono" aria-label="Microfono">🎤</button>
-  </div>
-
-  <!-- 🔹 RIGA ESISTENTE per scrivere i messaggi -->
-  <div class="row">
-    <input id="msgInput" placeholder="Message…" />
-    <button id="sendBtn" data-i18n="send" disabled></button>
-    <button id="clearBtn" data-i18n="clear"></button>
-  </div>
-</section>
-
-    
-   
-    
+      <div class="row">
+        <input id="msgInput" placeholder="Message…" />
+        <button id="sendBtn" data-i18n="send" disabled></button>
+        <button id="clearBtn" data-i18n="clear"></button>
+      </div>
+    </section>
   </main>
-<dialog id="imgPreviewDlg">
-  <h3>Anteprima immagine</h3>
-  <img id="imgPreview" alt="Anteprima" style="max-width:100%;height:auto;border-radius:8px;border:1px solid #ddd"/>
-  <div class="row" style="margin-top:10px">
-    <button id="confirmSendImg">Invia</button>
-    <button id="cancelSendImg" class="ghost">Annulla</button>
-  </div>
-</dialog>
 
-  <footer>
-    <span>Silent • E2E con WebCrypto</span>
+  <footer class="muted">
+    <small data-i18n="autodestruct"></small>
   </footer>
 
-  <script type="module" src="i18n.js"></script>
-  <script type="module" src="crypto.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
