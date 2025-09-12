@@ -63,21 +63,27 @@
     </div>
   </details>
 </section>
+<section class="card">
+  <h2 data-i18n="chat"></h2>
+  <div id="log" class="log"></div>
+
+  <!-- 🔹 NUOVA TOOLBAR con fotocamera e microfono -->
+  <div class="toolbar">
+    <button id="cameraBtn" class="icon-btn" title="Fotocamera" aria-label="Fotocamera">📷</button>
+    <button id="micBtn" class="icon-btn" title="Microfono" aria-label="Microfono">🎤</button>
+  </div>
+
+  <!-- 🔹 RIGA ESISTENTE per scrivere i messaggi -->
+  <div class="row">
+    <input id="msgInput" placeholder="Message…" />
+    <button id="sendBtn" data-i18n="send" disabled></button>
+    <button id="clearBtn" data-i18n="clear"></button>
+  </div>
+</section>
 
     
-    <section class="panel">
-      <h2 data-i18n="chat">Chat</h2>
-      <ul id="log" class="messages" aria-live="polite"></ul>
-      <div class="composer">
-              <div class="toolbar">
-        <button id="cameraBtn" class="icon-btn" title="Fotocamera" aria-label="Fotocamera">📷</button>
-        <button id="micBtn" class="icon-btn" title="Microfono" aria-label="Microfono">🎤</button>
-      </div>
-     <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
-        <button id="sendBtn" data-i18n="send">Invia</button>
-      </div>
-      <small data-i18n="autodestruct">I messaggi si autodistruggono 5 minuti dopo la lettura.</small>
-    </section>
+   
+    
   </main>
 <dialog id="imgPreviewDlg">
   <h3>Anteprima immagine</h3>
