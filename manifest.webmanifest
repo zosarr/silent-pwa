@@ -1,0 +1,20 @@
+{
+  "name": "Silent — Secure Chat",
+  "short_name": "Silent",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ede0d4",
+  "theme_color": "#b08968",
+  "icons": [
+    {
+      "src": "icons/1.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/2.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
