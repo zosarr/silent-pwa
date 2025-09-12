@@ -8,8 +8,9 @@
   <meta name="theme-color" content="#0d0d0f"/>
 <link rel="stylesheet" href="styles.css">
 
-  <link rel="icon" href="1.png">
+ <link rel="icon" href="1.png">
   <link rel="icon" href="2.png">
+  <link rel="icon" href="2.phg">
   <!-- richiesto: 2.phg; manteniamo anche questo riferimento in caso sia presente -->
   <link rel="icon" href="2.phg">
 </head>
@@ -68,10 +69,11 @@
       <h2 data-i18n="chat">Chat</h2>
       <ul id="log" class="messages" aria-live="polite"></ul>
       <div class="composer">
-        <input id="imgInput" type="file" accept="image/*" style="display:none"/>
-    <button id="sendImgBtn" title="Invia immagine">📷</button>
-
-        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
+              <div class="toolbar">
+        <button id="cameraBtn" class="icon-btn" title="Fotocamera" aria-label="Fotocamera">📷</button>
+        <button id="micBtn" class="icon-btn" title="Microfono" aria-label="Microfono">🎤</button>
+      </div>
+     <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
         <button id="sendBtn" data-i18n="send">Invia</button>
       </div>
       <small data-i18n="autodestruct">I messaggi si autodistruggono 5 minuti dopo la lettura.</small>
