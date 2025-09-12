@@ -54,23 +54,25 @@
       <button id="startSessionBtn" data-i18n="startSession"></button>
       <div id="status" class="muted"></div>
     </section>
+<section class="card">
+  <h2 data-i18n="chat"></h2>
+  <div id="log" class="log"></div>
 
-    <section class="card">
-      <h2 data-i18n="chat"></h2>
-      <div id="log" class="log"></div>
+  <!-- 🔹 Toolbar con fotocamera e microfono -->
+  <div class="toolbar">
+    <button id="cameraBtn" class="icon-btn" title="Fotocamera" aria-label="Fotocamera">📷</button>
+    <button id="micBtn" class="icon-btn" title="Microfono" aria-label="Microfono">🎤</button>
+  </div>
 
-      <!-- 🔹 NUOVA TOOLBAR -->
-      <div class="toolbar">
-        <button id="cameraBtn" class="icon-btn" title="Fotocamera" aria-label="Fotocamera">📷</button>
-        <button id="micBtn" class="icon-btn" title="Microfono" aria-label="Microfono">🎤</button>
-      </div>
+  <!-- 🔹 Barra chat -->
+  <div class="row">
+    <input id="msgInput" placeholder="Message…" />
+    <button id="sendBtn" data-i18n="send" disabled></button>
+    <button id="clearBtn" data-i18n="clear"></button>
+  </div>
+</section>
 
-      <div class="row">
-        <input id="msgInput" placeholder="Message…" />
-        <button id="sendBtn" data-i18n="send" disabled></button>
-        <button id="clearBtn" data-i18n="clear"></button>
-      </div>
-    </section>
+    
   </main>
 
   <footer class="muted">
