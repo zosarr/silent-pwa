@@ -64,3 +64,25 @@ dialog { border-radius: 12px; border: 1px solid rgba(0,0,0,.1); padding: 12px; }
 #msgInput{ flex:2 1 500px; min-width:240px; width:100%; }
 .toolbar{ display:flex; gap:8px; margin:8px 0; }
 .icon-btn{ border:1px solid #00000010; background:#fff; border-radius:10px; padding:8px 10px; min-height:38px; cursor:pointer; }
+/* widen message input */
+#msgInput {
+  flex: 2 1 500px;
+  min-width: 240px;
+  width: 100%;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.icon-btn {
+  border: 1px solid #00000010;
+  background: #fff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  min-height: 38px;
+  cursor: pointer;
+}
+
