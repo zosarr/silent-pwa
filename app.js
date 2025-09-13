@@ -10,13 +10,16 @@ let isConnecting = false;
 let isConnected = false;
 let reconnectTimer = null;
 
-// Stato registrazione (senza modificare l'HTML)
+// Stato registrazione (senza cambiare l'HTML)
 let mediaStream = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let recStart = 0;
 let pressTimer = null;
 const LONG_PRESS_MS = 350; // soglia per avviare registrazione
+
+// PWA install prompt
+let deferredPrompt = null;
 
 const els = {
   log: document.getElementById('log'),
@@ -48,11 +51,64 @@ if ('serviceWorker' in navigator) {
 const qs = new URLSearchParams(location.search);
 els.wsUrl.value = qs.get('ws') || AUTO_WS_URL;
 
-function setStatus(txt, kind='neutral'){
+// ====== Stato connessione: testo e colori richiesti ======
+function setConnState(connected){
+  isConnected = !!connected;
+  const txt = connected ? 'connesso' : 'non connesso';
   els.status.textContent = txt;
-  els.status.className = 'pill ' + kind;
+  els.status.className = 'pill'; // reset class
+  // colori espliciti: verde/rosso
+  els.status.style.backgroundColor = connected ? '#16a34a' : '#dc2626';
+  els.status.style.color = '#ffffff';
 }
 
+// iniziale
+setConnState(false);
+
+// ====== Install button in alto a destra (ricreato via JS, senza cambiare HTML) ======
+const headerRight = document.querySelector('header .right');
+const installBtn = document.createElement('button');
+installBtn.textContent = 'Installa';
+installBtn.style.marginLeft = '8px';
+installBtn.style.display = 'none'; // visibile solo quando possibile installare
+headerRight && headerRight.appendChild(installBtn);
+
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.style.display = '';
+});
+installBtn.addEventListener('click', async ()=>{
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice.catch(()=>{});
+  deferredPrompt = null;
+  installBtn.style.display = 'none';
+});
+
+// ====== Sezione "Scambio chiavi": rimuovi frasi e implementa toggle ======
+const sessionSection = els.startSession.closest('section');
+const sessionTitle = sessionSection ? sessionSection.querySelector('[data-i18n="session"]') : null;
+const sessionHint  = sessionSection ? sessionSection.querySelector('[data-i18n="sessionHint"]') : null;
+// Rimuovi le frasi richieste
+sessionTitle && sessionTitle.remove();
+sessionHint  && sessionHint.remove();
+
+// Bottone toggle (in alto a destra) per aprire/chiudere la sezione chiavi
+const toggleKeysBtn = document.createElement('button');
+toggleKeysBtn.textContent = 'Chiavi';
+toggleKeysBtn.style.marginLeft = '8px';
+headerRight && headerRight.appendChild(toggleKeysBtn);
+
+function showSession(){ if(sessionSection){ sessionSection.style.display=''; } }
+function hideSession(){ if(sessionSection){ sessionSection.style.display='none'; } }
+toggleKeysBtn.addEventListener('click', ()=>{
+  if (!sessionSection) return;
+  const hidden = sessionSection.style.display === 'none';
+  if (hidden) showSession(); else hideSession();
+});
+
+// ====== Chat UI helpers ======
 function addMsg(text, who='peer'){
   const el = document.createElement('div');
   el.className = 'msg ' + who;
@@ -61,7 +117,6 @@ function addMsg(text, who='peer'){
   els.log.scrollTop = els.log.scrollHeight;
   setTimeout(()=> el.remove(), 5*60*1000);
 }
-
 function addAudioMsg(url, who='peer', durMs=null){
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + who;
@@ -80,6 +135,7 @@ function addAudioMsg(url, who='peer', durMs=null){
   setTimeout(()=>{ URL.revokeObjectURL(url); wrap.remove(); }, 5*60*1000);
 }
 
+// ====== E2E keys ======
 async function ensureKeys(){
   if (!e2e.myPubRaw) {
     const pub = await e2e.init();
@@ -89,20 +145,21 @@ async function ensureKeys(){
   }
 }
 
+// ====== WebSocket ======
 function connect(){
   if (isConnecting || isConnected) return;
   const url = els.wsUrl.value.trim();
   if (!url.startsWith('ws')) { alert('URL WS non valido'); return; }
   isConnecting = true;
-  setStatus('…', 'neutral');
+  setConnState(false);
   ws = new WebSocket(url);
   ws.addEventListener('open', ()=>{
-    isConnecting = false; isConnected = true;
-    setStatus(STRINGS[els.langSel.value].status_connected, 'ok');
+    isConnecting = false;
+    setConnState(true);
   });
   ws.addEventListener('close', ()=>{
-    isConnected = false; isConnecting = false;
-    setStatus(STRINGS[els.langSel.value].status_disconnected, 'warn');
+    isConnecting = false;
+    setConnState(false);
     if (reconnectTimer) clearTimeout(reconnectTimer);
   });
   ws.addEventListener('message', async (ev)=>{
@@ -112,7 +169,7 @@ function connect(){
       if (msg.type === 'key'){
         await ensureKeys();
         await e2e.setPeerPublicKey(msg.raw);
-        setStatus(STRINGS[els.langSel.value].status_ready, 'ok');
+        // al primo avvio sessione potremmo nascondere la sezione (se vuoi solo in quel momento)
         return;
       }
       if (msg.type === 'msg'){
@@ -133,9 +190,11 @@ function connect(){
   });
 }
 
-els.connectBtn.addEventListener('click', async ()=>{
-  connect();
+// ====== Auto-connessione all’avvio (niente click su "Connetti") ======
+(async function autoStart(){
   await ensureKeys();
+  connect();
+  // invia la mia chiave appena il WS diventa pronto
   const sendKeyWhenReady = ()=>{
     if (ws && ws.readyState === 1){
       ws.send(JSON.stringify({type:'key', raw: els.myPub.value}));
@@ -144,7 +203,10 @@ els.connectBtn.addEventListener('click', async ()=>{
     }
   };
   sendKeyWhenReady();
-});
+})();
+
+// ====== Pulsanti esistenti ======
+els.connectBtn && (els.connectBtn.style.display = 'none'); // nascondi "Connetti" se presente
 
 els.startSession.addEventListener('click', async ()=>{
   await ensureKeys();
@@ -154,11 +216,12 @@ els.startSession.addEventListener('click', async ()=>{
   if (ws && ws.readyState === 1){
     ws.send(JSON.stringify({type:'key', raw: els.myPub.value}));
   }
-  setStatus(STRINGS[els.langSel.value].status_ready, 'ok');
+  // chiudi la sezione "Scambio chiavi" al click su Avvia sessione
+  hideSession();
 });
 
 els.sendBtn.addEventListener('click', async ()=>{
-  // click breve = invio testo (comportamento invariato)
+  // click breve = invio testo
   if (!isConnected) return alert('Non connesso');
   if (!e2e.ready) return alert('Sessione E2E non attiva');
   const text = els.input.value.trim();
@@ -179,11 +242,7 @@ els.input.addEventListener('keydown', (e)=>{
 // pulisci chat
 els.clearBtn.addEventListener('click', ()=>{ els.log.innerHTML = ''; });
 
-/* ======================
-   Registrazioni vocali (senza cambiare HTML):
-   - pressione prolungata sul bottone "Invia" avvia la registrazione
-   - rilascio ferma e invia l'audio
-   ====================== */
+// ====== Registrazioni vocali tramite pressione prolungata su "Invia" ======
 async function ensureMic(){
   if (mediaStream) return mediaStream;
   try{
@@ -195,13 +254,12 @@ async function ensureMic(){
   }
 }
 function setRecUi(recording){
-  // riuso del pill "status" per mostrare stato REC senza aggiungere elementi
-  els.status.textContent = recording ? 'REC… (tieni premuto, rilascia per inviare)' : STRINGS[els.langSel.value].status_connected;
-  els.status.className = 'pill ' + (recording ? 'warn' : 'ok');
+  // mostra lo stato REC usando lo stesso badge
+  els.status.textContent = recording ? 'REC… (tieni premuto, rilascia per inviare)' : (isConnected ? 'connesso' : 'non connesso');
+  els.status.style.backgroundColor = recording ? '#dc2626' : (isConnected ? '#16a34a' : '#dc2626');
+  els.status.style.color = '#ffffff';
 }
-
 function startLongPressTimer(e){
-  // evita che il click breve parta mentre registriamo
   pressTimer = setTimeout(async ()=>{
     if (!isConnected) return alert('Non connesso');
     if (!e2e.ready) return alert('Sessione E2E non attiva');
@@ -233,20 +291,16 @@ function startLongPressTimer(e){
     setRecUi(true);
   }, LONG_PRESS_MS);
 }
-
 function clearLongPressTimer(){
   if (pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
-  // se stiamo registrando, il rilascio ferma e invia
   if (mediaRecorder && mediaRecorder.state !== 'inactive'){
     mediaRecorder.stop();
   }
 }
-
 // Desktop (mouse)
 els.sendBtn.addEventListener('mousedown', startLongPressTimer);
 els.sendBtn.addEventListener('mouseup', clearLongPressTimer);
 els.sendBtn.addEventListener('mouseleave', clearLongPressTimer);
-
 // Mobile (touch)
 els.sendBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); startLongPressTimer(e); }, {passive:false});
 els.sendBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); clearLongPressTimer(); }, {passive:false});
