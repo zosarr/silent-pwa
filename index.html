@@ -15,57 +15,56 @@
       <img src="icons/1.png" alt="Silent" width="32" height="32">
       <h1>Silent</h1>
     </div>
-    <div class="actions">
-      <select id="langSelect" aria-label="Language">
-        <option value="it">Italiano</option>
-        <option value="en">English</option>
+    <div class="right">
+      <select id="langSel">
+        <option value="it">IT</option>
+        <option value="en">EN</option>
       </select>
-      <button id="installBtn" class="ghost">Install</button>
-      <button id="clearBtn" class="danger" data-i18n="clear">Pulisci</button>
     </div>
   </header>
 
   <main>
-<section class="panel">
-  <h2 data-i18n="connection">Connessione</h2>
+    <section class="card">
+      <h2 data-i18n="connection">Connessione</h2>
+      <div class="row">
+        <input id="wsUrl" placeholder="wss://example/ws?room=..." />
+        <button id="connectBtn" data-i18n="connect">Connetti</button>
+        <span id="status" class="pill">--</span>
+      </div>
+    </section>
 
-  <!-- Box stato -->
-  <div id="connStatus" class="status-box disconnected">
-    Non connesso
-  </div>
+    <section class="card">
+      <h2 data-i18n="session">Scambio chiavi</h2>
+      <p class="muted" data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</p>
+      <div class="row">
+        <label data-i18n="myPub">La mia chiave</label>
+        <textarea id="myPub" readonly rows="3"></textarea>
+      </div>
+      <div class="row">
+        <label data-i18n="peerPub">Chiave utente (incolla)</label>
+        <textarea id="peerPub" rows="3"></textarea>
+      </div>
+      <div class="row">
+        <button id="startSession" data-i18n="startSession">Avvia sessione</button>
+        <span id="fingerprint" class="pill"></span>
+      </div>
+    </section>
 
-  <details>
-    <summary data-i18n="session">Scambio chiavi</summary>
-    <div class="grid2">
-      <label>
-        <span data-i18n="myPub">La mia chiave</span>
-        <textarea id="myPub" readonly></textarea>
-        <div class="row">
-          <button id="copyMyPubBtn">Copia chiave</button>
-        </div>
-      </label>
-
-     <label>
-    <span data-i18n="peerPub">Chiave utente (incolla)</span>
-    <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
-</label>
-
-    </div>
-
-    <div class="row">
-      <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
-      <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
-    </div>
-  </details>
-</section>
-
-    
-    <section class="panel">
+    <section class="card">
       <h2 data-i18n="chat">Chat</h2>
-      <ul id="log" class="messages" aria-live="polite"></ul>
-      <div class="composer">
-        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
+      <div id="log" class="log"></div>
+
+      <!-- 🎤 CONTROLLI AUDIO -->
+      <div class="row">
+        <button id="recBtn" title="Registra audio">🎙️ Registra</button>
+        <button id="stopRecBtn" title="Stop" disabled>Stop</button>
+        <span id="recStatus" class="pill"></span>
+      </div>
+
+      <div class="row">
+        <input id="msgInput" placeholder="Scrivi un messaggio…"/>
         <button id="sendBtn" data-i18n="send">Invia</button>
+        <button id="clearBtn" data-i18n="clear">Pulisci</button>
       </div>
       <small data-i18n="autodestruct">I messaggi si autodistruggono 5 minuti dopo la lettura.</small>
     </section>
