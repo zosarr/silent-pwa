@@ -10,11 +10,13 @@ let isConnecting = false;
 let isConnected = false;
 let reconnectTimer = null;
 
-// MediaRecorder stato
+// Stato registrazione (senza modificare l'HTML)
 let mediaStream = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let recStart = 0;
+let pressTimer = null;
+const LONG_PRESS_MS = 350; // soglia per avviare registrazione
 
 const els = {
   log: document.getElementById('log'),
@@ -28,11 +30,7 @@ const els = {
   fingerprint: document.getElementById('fingerprint'),
   langSel: document.getElementById('langSel'),
   clearBtn: document.getElementById('clearBtn'),
-  wsUrl: document.getElementById('wsUrl'),
-  // nuovi
-  recBtn: document.getElementById('recBtn'),
-  stopRecBtn: document.getElementById('stopRecBtn'),
-  recStatus: document.getElementById('recStatus')
+  wsUrl: document.getElementById('wsUrl')
 };
 
 function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
@@ -79,11 +77,7 @@ function addAudioMsg(url, who='peer', durMs=null){
   wrap.appendChild(audio);
   els.log.appendChild(wrap);
   els.log.scrollTop = els.log.scrollHeight;
-  // auto-distruzione dopo 5 minuti
-  setTimeout(()=>{
-    URL.revokeObjectURL(url);
-    wrap.remove();
-  }, 5*60*1000);
+  setTimeout(()=>{ URL.revokeObjectURL(url); wrap.remove(); }, 5*60*1000);
 }
 
 async function ensureKeys(){
@@ -142,7 +136,6 @@ function connect(){
 els.connectBtn.addEventListener('click', async ()=>{
   connect();
   await ensureKeys();
-  // invia subito la mia chiave appena connesso
   const sendKeyWhenReady = ()=>{
     if (ws && ws.readyState === 1){
       ws.send(JSON.stringify({type:'key', raw: els.myPub.value}));
@@ -165,6 +158,7 @@ els.startSession.addEventListener('click', async ()=>{
 });
 
 els.sendBtn.addEventListener('click', async ()=>{
+  // click breve = invio testo (comportamento invariato)
   if (!isConnected) return alert('Non connesso');
   if (!e2e.ready) return alert('Sessione E2E non attiva');
   const text = els.input.value.trim();
@@ -186,7 +180,9 @@ els.input.addEventListener('keydown', (e)=>{
 els.clearBtn.addEventListener('click', ()=>{ els.log.innerHTML = ''; });
 
 /* ======================
-   Registrazioni vocali
+   Registrazioni vocali (senza cambiare HTML):
+   - pressione prolungata sul bottone "Invia" avvia la registrazione
+   - rilascio ferma e invia l'audio
    ====================== */
 async function ensureMic(){
   if (mediaStream) return mediaStream;
@@ -198,47 +194,60 @@ async function ensureMic(){
     throw err;
   }
 }
-
 function setRecUi(recording){
-  els.recBtn.disabled = recording;
-  els.stopRecBtn.disabled = !recording;
-  els.recStatus.textContent = recording ? 'REC…' : '';
-  els.recStatus.className = 'pill ' + (recording ? 'warn' : 'neutral');
+  // riuso del pill "status" per mostrare stato REC senza aggiungere elementi
+  els.status.textContent = recording ? 'REC… (tieni premuto, rilascia per inviare)' : STRINGS[els.langSel.value].status_connected;
+  els.status.className = 'pill ' + (recording ? 'warn' : 'ok');
 }
 
-els.recBtn.addEventListener('click', async ()=>{
-  if (!isConnected) return alert('Non connesso');
-  if (!e2e.ready) return alert('Sessione E2E non attiva');
+function startLongPressTimer(e){
+  // evita che il click breve parta mentre registriamo
+  pressTimer = setTimeout(async ()=>{
+    if (!isConnected) return alert('Non connesso');
+    if (!e2e.ready) return alert('Sessione E2E non attiva');
 
-  await ensureMic();
-  audioChunks = [];
-  mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'audio/webm;codecs=opus' });
-  mediaRecorder.ondataavailable = (e)=>{ if (e.data && e.data.size) audioChunks.push(e.data); };
-  mediaRecorder.onstop = async ()=>{
-    try{
-      const blob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
-      const dur = Date.now() - recStart;
-      const buf = await blob.arrayBuffer();
-      const {iv, ct} = await e2e.encryptBytes(buf);
-      if (ws && ws.readyState === 1){
-        ws.send(JSON.stringify({type:'audio', iv, ct, mime: blob.type, dur}));
+    await ensureMic();
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'audio/webm;codecs=opus' });
+    mediaRecorder.ondataavailable = (ev)=>{ if (ev.data && ev.data.size) audioChunks.push(ev.data); };
+    mediaRecorder.onstop = async ()=>{
+      try{
+        const blob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
+        const dur = Date.now() - recStart;
+        const buf = await blob.arrayBuffer();
+        const {iv, ct} = await e2e.encryptBytes(buf);
+        if (ws && ws.readyState === 1){
+          ws.send(JSON.stringify({type:'audio', iv, ct, mime: blob.type, dur}));
+        }
+        const url = URL.createObjectURL(blob);
+        addAudioMsg(url, 'me', dur);
+      }catch(err){
+        console.error(err);
+        alert('Errore invio audio: ' + err.message);
+      }finally{
+        setRecUi(false);
       }
-      const url = URL.createObjectURL(blob);
-      addAudioMsg(url, 'me', dur);
-    }catch(err){
-      console.error(err);
-      alert('Errore invio audio: ' + err.message);
-    }finally{
-      setRecUi(false);
-    }
-  };
-  recStart = Date.now();
-  mediaRecorder.start();
-  setRecUi(true);
-});
+    };
+    recStart = Date.now();
+    mediaRecorder.start();
+    setRecUi(true);
+  }, LONG_PRESS_MS);
+}
 
-els.stopRecBtn.addEventListener('click', ()=>{
+function clearLongPressTimer(){
+  if (pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
+  // se stiamo registrando, il rilascio ferma e invia
   if (mediaRecorder && mediaRecorder.state !== 'inactive'){
     mediaRecorder.stop();
   }
-});
+}
+
+// Desktop (mouse)
+els.sendBtn.addEventListener('mousedown', startLongPressTimer);
+els.sendBtn.addEventListener('mouseup', clearLongPressTimer);
+els.sendBtn.addEventListener('mouseleave', clearLongPressTimer);
+
+// Mobile (touch)
+els.sendBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); startLongPressTimer(e); }, {passive:false});
+els.sendBtn.addEventListener('touchend', (e)=>{ e.preventDefault(); clearLongPressTimer(); }, {passive:false});
+els.sendBtn.addEventListener('touchcancel', (e)=>{ e.preventDefault(); clearLongPressTimer(); }, {passive:false});
