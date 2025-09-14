@@ -85,7 +85,7 @@ installBtn.addEventListener('click', async ()=>{
   installBtn.style.display = 'none';
 });
 
-// === Sezione “Scambio chiavi”: rimuovi SOLO le frasi; chiudi alla partenza; riapribile con doppio tap sullo stato ===
+// === Sezione “Scambio chiavi”: nascondi SOLO le frasi; chiudi alla partenza; riapri col doppio click sullo stato ===
 const sessionSection = els.startSession && els.startSession.closest('section');
 const sessionTitle = sessionSection ? sessionSection.querySelector('[data-i18n="session"]') : null;
 const sessionHint  = sessionSection ? sessionSection.querySelector('[data-i18n="sessionHint"]') : null;
@@ -94,7 +94,7 @@ if (sessionHint)  sessionHint.style.display  = 'none';
 
 function showSession(){ if(sessionSection) sessionSection.style.display=''; }
 function hideSession(){ if(sessionSection) sessionSection.style.display='none'; }
-// Niente tasto “Chiavi”: per riaprire/chiudere fai doppio click sull’etichetta di stato
+// Ri-apertura/chiusura con doppio click sull’etichetta di stato
 els.status && els.status.addEventListener('dblclick', ()=>{
   if (!sessionSection) return;
   const hidden = sessionSection.style.display === 'none';
@@ -127,6 +127,19 @@ function addAudioMsg(url, who='peer', durMs=null){
   els.log.scrollTop = els.log.scrollHeight;
   setTimeout(()=>{ URL.revokeObjectURL(url); wrap.remove(); }, 5*60*1000);
 }
+function addImageMsg(url, who='peer'){
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + who;
+  const img = document.createElement('img');
+  img.src = url;
+  img.alt = 'foto';
+  img.style.maxWidth = '70%';
+  img.style.borderRadius = '8px';
+  wrap.appendChild(img);
+  els.log.appendChild(wrap);
+  els.log.scrollTop = els.log.scrollHeight;
+  setTimeout(()=>{ URL.revokeObjectURL(url); wrap.remove(); }, 5*60*1000);
+}
 
 // === E2E ===
 async function ensureKeys(){
@@ -139,6 +152,26 @@ async function ensureKeys(){
     }
   }
 }
+
+// === COPIA CHIAVE: bottone “Copia chiave” accanto alla mia casella (senza cambiare HTML) ===
+(function injectCopyMyKey(){
+  if (!els.myPub) return;
+  const btn = document.createElement('button');
+  btn.id = 'copyMyKey';
+  btn.textContent = 'Copia chiave';
+  btn.style.marginTop = '6px';
+  btn.addEventListener('click', async ()=>{
+    try{
+      await navigator.clipboard.writeText(els.myPub.value || '');
+      // feedback rapido sullo stato
+      const old = els.status.textContent;
+      els.status.textContent = 'copiata ✔';
+      setTimeout(()=>{ els.status.textContent = old; setConnState(isConnected); }, 1200);
+    }catch(e){ alert('Impossibile copiare: ' + e.message); }
+  });
+  // Inserisco subito dopo la textarea
+  els.myPub.parentElement && els.myPub.parentElement.insertBefore(btn, els.myPub.nextSibling);
+})();
 
 // === WebSocket ===
 function connect(){
@@ -176,6 +209,14 @@ function connect(){
         const blob = new Blob([buf], { type: msg.mime || 'audio/webm;codecs=opus' });
         const url = URL.createObjectURL(blob);
         addAudioMsg(url, 'peer', msg.dur);
+        return;
+      }
+      if (msg.type === 'image'){
+        if (!e2e.ready) return;
+        const buf = await e2e.decryptBytes(msg.iv, msg.ct);
+        const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
+        const url = URL.createObjectURL(blob);
+        addImageMsg(url, 'peer');
         return;
       }
     }catch(e){ /* ignore */ }
@@ -297,3 +338,71 @@ if (els.recBtn && els.stopRecBtn){
     }
   });
 }
+
+// === FOTO: bottone “Foto” + uso camera (senza cambiare HTML) ===
+(function injectPhotoControls(){
+  if (!els.sendBtn) return;
+  const photoBtn = document.createElement('button');
+  photoBtn.id = 'photoBtn';
+  photoBtn.textContent = 'Foto';
+  photoBtn.style.marginLeft = '6px';
+  els.sendBtn.parentElement && els.sendBtn.parentElement.appendChild(photoBtn);
+
+  // input file nascosto: usa la camera se disponibile
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*';
+  fileInput.capture = 'environment';
+  fileInput.style.display = 'none';
+  document.body.appendChild(fileInput);
+
+  photoBtn.addEventListener('click', ()=> fileInput.click());
+
+  fileInput.addEventListener('change', async ()=>{
+    if (!fileInput.files || !fileInput.files[0]) return;
+    if (!isConnected) return alert('Non connesso');
+    if (!e2e.ready) return alert('Sessione E2E non attiva');
+
+    const file = fileInput.files[0];
+    try{
+      // carica immagine e ricomprimi a JPEG per contenere il peso
+      const img = await blobToImage(file);
+      const {blob, width, height} = await imageToJpegBlob(img, {maxW: 1600, maxH: 1600, quality: 0.85});
+      const buf = await blob.arrayBuffer();
+      const {iv, ct} = await e2e.encryptBytes(buf);
+      if (ws && ws.readyState === 1){
+        ws.send(JSON.stringify({type:'image', iv, ct, mime: 'image/jpeg', w: width, h: height}));
+      }
+      const url = URL.createObjectURL(blob);
+      addImageMsg(url, 'me');
+    }catch(err){
+      console.error(err);
+      alert('Errore invio foto: ' + err.message);
+    }finally{
+      fileInput.value = '';
+    }
+  });
+
+  function blobToImage(blob){
+    return new Promise((resolve, reject)=>{
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = ()=>{ URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = (e)=>{ URL.revokeObjectURL(url); reject(new Error('Immagine non valida')); };
+      img.src = url;
+    });
+  }
+  function imageToJpegBlob(img, {maxW=1600, maxH=1600, quality=0.85}={}){
+    const {naturalWidth:w, naturalHeight:h} = img;
+    let nw=w, nh=h;
+    const ratio = Math.min(maxW/w, maxH/h, 1);
+    nw = Math.round(w*ratio); nh = Math.round(h*ratio);
+    const canvas = document.createElement('canvas');
+    canvas.width = nw; canvas.height = nh;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, nw, nh);
+    return new Promise((resolve)=>{
+      canvas.toBlob((b)=> resolve({blob:b, width:nw, height:nh}), 'image/jpeg', quality);
+    });
+  }
+})();
