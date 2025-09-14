@@ -35,7 +35,7 @@ const els = {
   stopRecBtn: document.getElementById('stopRecBtn')
 };
 
-// Nuovo: riferimento al titolo "Connessione"
+// Riferimento al titolo "Connessione"
 const connTitle = document.querySelector('[data-i18n="connection"]');
 
 function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
@@ -55,43 +55,74 @@ const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
 if (els.wsUrl) { els.wsUrl.value = FORCED_WS; els.wsUrl.style.display = 'none'; }
 if (els.connectBtn) els.connectBtn.style.display = 'none';
 
-// === Stato “connesso / non connesso” grande e con colori + testo accanto a "Connessione:" ===
+// === Sposta le etichette SOPRA alle caselle (senza toccare l'HTML) ===
+(function fixLabelsAbove(){
+  if (els.myPub){
+    const labelMy = (els.myPub.parentElement || document).querySelector('[data-i18n="myPub"]');
+    if (labelMy && labelMy.nextSibling !== els.myPub){
+      labelMy.parentElement.insertBefore(labelMy, els.myPub);
+    }
+    labelMy && (labelMy.style.display = 'block', labelMy.style.fontWeight = '600', labelMy.style.marginBottom = '6px');
+  }
+  if (els.peerPub){
+    const labelPeer = (els.peerPub.parentElement || document).querySelector('[data-i18n="peerPub"]');
+    if (labelPeer && labelPeer.nextSibling !== els.peerPub){
+      labelPeer.parentElement.insertBefore(labelPeer, els.peerPub);
+    }
+    labelPeer && (labelPeer.style.display = 'block', labelPeer.style.fontWeight = '600', labelPeer.style.marginBottom = '6px');
+  }
+})();
+
+// === Stato “connesso / non connesso”: verde/rosso accanto a "Connessione:" e rimuovi badge sotto ===
 function setConnState(connected){
   isConnected = !!connected;
   const txt = connected ? 'connesso' : 'non connesso';
+  const color = connected ? '#16a34a' : '#dc2626';
 
-  // pill colorata
-  els.status.textContent = txt;
-  els.status.className = 'pill';
-  els.status.style.fontSize = '18px';
-  els.status.style.fontWeight = '800';
-  els.status.style.backgroundColor = connected ? '#16a34a' : '#dc2626'; // verde/rosso
-  els.status.style.color = '#ffffff';
+  // titolo con i due punti e lo stato colorato
+  if (connTitle){
+    connTitle.textContent = `Connessione: ${txt}`;
+    connTitle.style.color = color;          // colore della scritta in alto
+    connTitle.style.fontWeight = '700';
+  }
 
-  // titolo con i due punti e lo stato
-  if (connTitle) connTitle.textContent = `Connessione: ${txt}`;
+  // nascondi completamente il badge di stato sotto
+  if (els.status){
+    els.status.style.display = 'none';
+  }
 }
 setConnState(false);
 
-// === Tasto “Installa” in alto a destra (ripristinato) ===
+// === Tasto “Installa” in alto a destra — sempre visibile ===
 const headerRight = document.querySelector('header .right');
 const installBtn = document.createElement('button');
 installBtn.textContent = 'Installa';
 installBtn.style.marginLeft = '8px';
-installBtn.style.display = 'none';
+installBtn.style.display = '';  // mostra sempre
 if (headerRight) headerRight.appendChild(installBtn);
 
 window.addEventListener('beforeinstallprompt', (e)=>{
   e.preventDefault();
   deferredPrompt = e;
-  installBtn.style.display = '';
 });
 installBtn.addEventListener('click', async ()=>{
-  if (!deferredPrompt) return;
-  deferredPrompt.prompt();
-  try { await deferredPrompt.userChoice; } catch {}
-  deferredPrompt = null;
-  installBtn.style.display = 'none';
+  // Se Chrome/Android fornisce il prompt nativo
+  if (deferredPrompt){
+    deferredPrompt.prompt();
+    try { await deferredPrompt.userChoice; } catch {}
+    deferredPrompt = null;
+    return;
+  }
+  // iOS/Safari o quando il prompt non è disponibile: istruzioni rapide
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (isStandalone){
+    alert('L’app è già installata.');
+  } else if (isIOS){
+    alert('Su iPhone/iPad: 1) Tocca • Condividi • 2) "Aggiungi alla schermata Home".');
+  } else {
+    alert('Se non vedi il prompt, usa il menu del browser per "Installa app" o "Aggiungi alla schermata Home".');
+  }
 });
 
 // === Sezione “Scambio chiavi”: nascondi SOLO le frasi; chiudi dopo avvio; riapribile col doppio click sullo stato ===
@@ -103,7 +134,7 @@ if (sessionHint)  sessionHint.style.display  = 'none';
 
 function showSession(){ if(sessionSection) sessionSection.style.display=''; }
 function hideSession(){ if(sessionSection) sessionSection.style.display='none'; }
-els.status && els.status.addEventListener('dblclick', ()=>{
+connTitle && connTitle.addEventListener('dblclick', ()=>{
   if (!sessionSection) return;
   const hidden = sessionSection.style.display === 'none';
   hidden ? showSession() : hideSession();
@@ -161,7 +192,7 @@ async function ensureKeys(){
   }
 }
 
-// === COPIA CHIAVE: bottone “Copia chiave” sotto la tua casella (senza cambiare HTML) ===
+// === Bottone “Copia chiave” sotto la mia casella (senza cambiare HTML) ===
 (function injectCopyMyKey(){
   if (!els.myPub) return;
   const btn = document.createElement('button');
@@ -171,9 +202,11 @@ async function ensureKeys(){
   btn.addEventListener('click', async ()=>{
     try{
       await navigator.clipboard.writeText(els.myPub.value || '');
-      const old = els.status.textContent;
-      els.status.textContent = 'copiata ✔';
-      setTimeout(()=>{ setConnState(isConnected); }, 1200);
+      const old = connTitle && connTitle.textContent;
+      if (connTitle){
+        connTitle.textContent = 'Connessione: chiave copiata ✔';
+        setTimeout(()=> setConnState(isConnected), 1200);
+      }
     }catch(e){ alert('Impossibile copiare: ' + e.message); }
   });
   els.myPub.parentElement && els.myPub.parentElement.insertBefore(btn, els.myPub.nextSibling);
@@ -243,7 +276,7 @@ function connect(){
   sendKeyWhenReady();
 })();
 
-// === Avvia sessione: chiudi sezione; riapri con doppio click sullo stato ===
+// === Avvia sessione: chiudi sezione; riapri con doppio click sul titolo “Connessione” ===
 els.startSession && els.startSession.addEventListener('click', async ()=>{
   await ensureKeys();
   const peerRaw = els.peerPub && els.peerPub.value.trim();
@@ -255,7 +288,7 @@ els.startSession && els.startSession.addEventListener('click', async ()=>{
   hideSession();
 });
 
-// === Invio TESTO (solo con tasto Invia) ===
+// === Invio TESTO ===
 els.sendBtn && els.sendBtn.addEventListener('click', async ()=>{
   if (!isConnected) return alert('Non connesso');
   if (!e2e.ready) return alert('Sessione E2E non attiva');
@@ -289,10 +322,11 @@ async function ensureMic(){
   }
 }
 function setRecUi(recording){
-  const baseTxt = isConnected ? 'connesso' : 'non connesso';
-  els.status.textContent = recording ? 'REC…' : baseTxt;
-  els.status.style.backgroundColor = recording ? '#dc2626' : (isConnected ? '#16a34a' : '#dc2626');
-  els.status.style.color = '#ffffff';
+  const color = recording ? '#dc2626' : (isConnected ? '#16a34a' : '#dc2626');
+  if (connTitle){
+    connTitle.style.color = color;
+    connTitle.textContent = recording ? 'Connessione: REC…' : `Connessione: ${isConnected ? 'connesso' : 'non connesso'}`;
+  }
 }
 if (els.recBtn && els.stopRecBtn){
   els.stopRecBtn.disabled = true;
@@ -351,7 +385,6 @@ if (els.recBtn && els.stopRecBtn){
   photoBtn.style.marginLeft = '6px';
   els.sendBtn.parentElement && els.sendBtn.parentElement.appendChild(photoBtn);
 
-  // due input: uno forza camera, l'altro galleria
   const cameraInput  = document.createElement('input');
   cameraInput.type = 'file'; cameraInput.accept = 'image/*'; cameraInput.capture = 'environment';
   cameraInput.style.display = 'none';
@@ -362,7 +395,6 @@ if (els.recBtn && els.stopRecBtn){
   document.body.appendChild(galleryInput);
 
   photoBtn.addEventListener('click', async ()=>{
-    // Scelta rapida: OK = scatta, Annulla = galleria
     const scatta = window.confirm('Scattare una foto?\nPremi "Annulla" per scegliere dalla galleria.');
     (scatta ? cameraInput : galleryInput).click();
   });
