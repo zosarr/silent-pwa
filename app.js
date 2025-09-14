@@ -9,7 +9,7 @@ let e2e = new E2E();
 let isConnecting = false;
 let isConnected = false;
 
-// Registrazione audio (usa eventuali pulsanti esistenti: #recBtn, #stopRecBtn)
+// Registrazione audio
 let mediaStream = null;
 let mediaRecorder = null;
 let audioChunks = [];
@@ -35,6 +35,9 @@ const els = {
   stopRecBtn: document.getElementById('stopRecBtn')
 };
 
+// Nuovo: riferimento al titolo "Connessione"
+const connTitle = document.querySelector('[data-i18n="connection"]');
+
 function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
 
 // I18N
@@ -52,19 +55,25 @@ const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
 if (els.wsUrl) { els.wsUrl.value = FORCED_WS; els.wsUrl.style.display = 'none'; }
 if (els.connectBtn) els.connectBtn.style.display = 'none';
 
-// === Stato “connesso / non connesso” grande e con colori ===
+// === Stato “connesso / non connesso” grande e con colori + testo accanto a "Connessione:" ===
 function setConnState(connected){
   isConnected = !!connected;
-  els.status.textContent = connected ? 'connesso' : 'non connesso';
+  const txt = connected ? 'connesso' : 'non connesso';
+
+  // pill colorata
+  els.status.textContent = txt;
   els.status.className = 'pill';
   els.status.style.fontSize = '18px';
   els.status.style.fontWeight = '800';
   els.status.style.backgroundColor = connected ? '#16a34a' : '#dc2626'; // verde/rosso
   els.status.style.color = '#ffffff';
+
+  // titolo con i due punti e lo stato
+  if (connTitle) connTitle.textContent = `Connessione: ${txt}`;
 }
 setConnState(false);
 
-// === Tasto “Installa” in alto a destra (senza toccare l’HTML) ===
+// === Tasto “Installa” in alto a destra (ripristinato) ===
 const headerRight = document.querySelector('header .right');
 const installBtn = document.createElement('button');
 installBtn.textContent = 'Installa';
@@ -85,7 +94,7 @@ installBtn.addEventListener('click', async ()=>{
   installBtn.style.display = 'none';
 });
 
-// === Sezione “Scambio chiavi”: nascondi SOLO le frasi; chiudi alla partenza; riapri col doppio click sullo stato ===
+// === Sezione “Scambio chiavi”: nascondi SOLO le frasi; chiudi dopo avvio; riapribile col doppio click sullo stato ===
 const sessionSection = els.startSession && els.startSession.closest('section');
 const sessionTitle = sessionSection ? sessionSection.querySelector('[data-i18n="session"]') : null;
 const sessionHint  = sessionSection ? sessionSection.querySelector('[data-i18n="sessionHint"]') : null;
@@ -94,7 +103,6 @@ if (sessionHint)  sessionHint.style.display  = 'none';
 
 function showSession(){ if(sessionSection) sessionSection.style.display=''; }
 function hideSession(){ if(sessionSection) sessionSection.style.display='none'; }
-// Ri-apertura/chiusura con doppio click sull’etichetta di stato
 els.status && els.status.addEventListener('dblclick', ()=>{
   if (!sessionSection) return;
   const hidden = sessionSection.style.display === 'none';
@@ -153,7 +161,7 @@ async function ensureKeys(){
   }
 }
 
-// === COPIA CHIAVE: bottone “Copia chiave” accanto alla mia casella (senza cambiare HTML) ===
+// === COPIA CHIAVE: bottone “Copia chiave” sotto la tua casella (senza cambiare HTML) ===
 (function injectCopyMyKey(){
   if (!els.myPub) return;
   const btn = document.createElement('button');
@@ -163,13 +171,11 @@ async function ensureKeys(){
   btn.addEventListener('click', async ()=>{
     try{
       await navigator.clipboard.writeText(els.myPub.value || '');
-      // feedback rapido sullo stato
       const old = els.status.textContent;
       els.status.textContent = 'copiata ✔';
-      setTimeout(()=>{ els.status.textContent = old; setConnState(isConnected); }, 1200);
+      setTimeout(()=>{ setConnState(isConnected); }, 1200);
     }catch(e){ alert('Impossibile copiare: ' + e.message); }
   });
-  // Inserisco subito dopo la textarea
   els.myPub.parentElement && els.myPub.parentElement.insertBefore(btn, els.myPub.nextSibling);
 })();
 
@@ -249,7 +255,7 @@ els.startSession && els.startSession.addEventListener('click', async ()=>{
   hideSession();
 });
 
-// === Invio TESTO: il tasto Invia invia SOLO messaggi di testo ===
+// === Invio TESTO (solo con tasto Invia) ===
 els.sendBtn && els.sendBtn.addEventListener('click', async ()=>{
   if (!isConnected) return alert('Non connesso');
   if (!e2e.ready) return alert('Sessione E2E non attiva');
@@ -271,7 +277,7 @@ els.input && els.input.addEventListener('keydown', (e)=>{
 // pulisci chat
 els.clearBtn && els.clearBtn.addEventListener('click', ()=>{ els.log.innerHTML = ''; });
 
-// === Registrazione AUDIO con pulsanti dedicati (recBtn / stopRecBtn) ===
+// === AUDIO: pulsanti rec/stop dedicati ===
 async function ensureMic(){
   if (mediaStream) return mediaStream;
   try{
@@ -288,10 +294,8 @@ function setRecUi(recording){
   els.status.style.backgroundColor = recording ? '#dc2626' : (isConnected ? '#16a34a' : '#dc2626');
   els.status.style.color = '#ffffff';
 }
-
 if (els.recBtn && els.stopRecBtn){
   els.stopRecBtn.disabled = true;
-
   els.recBtn.addEventListener('click', async ()=>{
     if (!isConnected) return alert('Non connesso');
     if (!e2e.ready) return alert('Sessione E2E non attiva');
@@ -331,7 +335,6 @@ if (els.recBtn && els.stopRecBtn){
     els.recBtn.disabled = true;
     els.stopRecBtn.disabled = false;
   });
-
   els.stopRecBtn.addEventListener('click', ()=>{
     if (mediaRecorder && mediaRecorder.state !== 'inactive'){
       mediaRecorder.stop();
@@ -339,7 +342,7 @@ if (els.recBtn && els.stopRecBtn){
   });
 }
 
-// === FOTO: bottone “Foto” + uso camera (senza cambiare HTML) ===
+// === FOTO: scelta tra SCATTA o GALLERIA (senza cambiare HTML) ===
 (function injectPhotoControls(){
   if (!els.sendBtn) return;
   const photoBtn = document.createElement('button');
@@ -348,55 +351,59 @@ if (els.recBtn && els.stopRecBtn){
   photoBtn.style.marginLeft = '6px';
   els.sendBtn.parentElement && els.sendBtn.parentElement.appendChild(photoBtn);
 
-  // input file nascosto: usa la camera se disponibile
-  const fileInput = document.createElement('input');
-  fileInput.type = 'file';
-  fileInput.accept = 'image/*';
-  fileInput.capture = 'environment';
-  fileInput.style.display = 'none';
-  document.body.appendChild(fileInput);
+  // due input: uno forza camera, l'altro galleria
+  const cameraInput  = document.createElement('input');
+  cameraInput.type = 'file'; cameraInput.accept = 'image/*'; cameraInput.capture = 'environment';
+  cameraInput.style.display = 'none';
+  const galleryInput = document.createElement('input');
+  galleryInput.type = 'file'; galleryInput.accept = 'image/*';
+  galleryInput.style.display = 'none';
+  document.body.appendChild(cameraInput);
+  document.body.appendChild(galleryInput);
 
-  photoBtn.addEventListener('click', ()=> fileInput.click());
+  photoBtn.addEventListener('click', async ()=>{
+    // Scelta rapida: OK = scatta, Annulla = galleria
+    const scatta = window.confirm('Scattare una foto?\nPremi "Annulla" per scegliere dalla galleria.');
+    (scatta ? cameraInput : galleryInput).click();
+  });
 
-  fileInput.addEventListener('change', async ()=>{
-    if (!fileInput.files || !fileInput.files[0]) return;
+  async function handleFile(file){
+    if (!file) return;
     if (!isConnected) return alert('Non connesso');
     if (!e2e.ready) return alert('Sessione E2E non attiva');
 
-    const file = fileInput.files[0];
     try{
-      // carica immagine e ricomprimi a JPEG per contenere il peso
       const img = await blobToImage(file);
-      const {blob, width, height} = await imageToJpegBlob(img, {maxW: 1600, maxH: 1600, quality: 0.85});
+      const {blob, width, height} = await imageToJpegBlob(img, {maxW:1600, maxH:1600, quality:0.85});
       const buf = await blob.arrayBuffer();
       const {iv, ct} = await e2e.encryptBytes(buf);
       if (ws && ws.readyState === 1){
-        ws.send(JSON.stringify({type:'image', iv, ct, mime: 'image/jpeg', w: width, h: height}));
+        ws.send(JSON.stringify({type:'image', iv, ct, mime:'image/jpeg', w:width, h:height}));
       }
       const url = URL.createObjectURL(blob);
       addImageMsg(url, 'me');
     }catch(err){
       console.error(err);
       alert('Errore invio foto: ' + err.message);
-    }finally{
-      fileInput.value = '';
     }
-  });
+  }
+
+  cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
+  galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
 
   function blobToImage(blob){
     return new Promise((resolve, reject)=>{
       const url = URL.createObjectURL(blob);
       const img = new Image();
       img.onload = ()=>{ URL.revokeObjectURL(url); resolve(img); };
-      img.onerror = (e)=>{ URL.revokeObjectURL(url); reject(new Error('Immagine non valida')); };
+      img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Immagine non valida')); };
       img.src = url;
     });
   }
   function imageToJpegBlob(img, {maxW=1600, maxH=1600, quality=0.85}={}){
     const {naturalWidth:w, naturalHeight:h} = img;
-    let nw=w, nh=h;
     const ratio = Math.min(maxW/w, maxH/h, 1);
-    nw = Math.round(w*ratio); nh = Math.round(h*ratio);
+    const nw = Math.round(w*ratio), nh = Math.round(h*ratio);
     const canvas = document.createElement('canvas');
     canvas.width = nw; canvas.height = nh;
     const ctx = canvas.getContext('2d');
