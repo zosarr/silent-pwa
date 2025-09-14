@@ -1,7 +1,7 @@
 import {E2E} from './crypto.js';
 import {STRINGS, applyLang} from './i18n.js';
 
-// === CONFIG: URL WS automatico (l'input verrà nascosto) ===
+// === URL WebSocket (connessione automatica) ===
 const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
 
 let ws = null;
@@ -9,13 +9,13 @@ let e2e = new E2E();
 let isConnecting = false;
 let isConnected = false;
 
-// Stato registrazione (usa pulsanti dedicati)
+// Registrazione audio (usa eventuali pulsanti esistenti: #recBtn, #stopRecBtn)
 let mediaStream = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let recStart = 0;
 
-// PWA install prompt
+// PWA install
 let deferredPrompt = null;
 
 const els = {
@@ -35,7 +35,7 @@ const els = {
   stopRecBtn: document.getElementById('stopRecBtn')
 };
 
-function escapeHtml(s){ return s.replace(/[&<>\"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;' }[m])); }
+function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
 
 // I18N
 els.langSel && els.langSel.addEventListener('change', ()=> applyLang(els.langSel.value));
@@ -46,17 +46,16 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
 }
 
-// Setup initial WS URL (forzato) e nascondi la casella
+// === Imposta e nascondi la casella URL WS (niente bottone "Connetti") ===
 const qs = new URLSearchParams(location.search);
 const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
 if (els.wsUrl) { els.wsUrl.value = FORCED_WS; els.wsUrl.style.display = 'none'; }
-if (els.connectBtn) els.connectBtn.style.display = 'none'; // no "Connetti" button
+if (els.connectBtn) els.connectBtn.style.display = 'none';
 
-// ====== Stato connessione: testo grande + colori ======
+// === Stato “connesso / non connesso” grande e con colori ===
 function setConnState(connected){
   isConnected = !!connected;
-  const txt = connected ? 'connesso' : 'non connesso';
-  els.status.textContent = txt;
+  els.status.textContent = connected ? 'connesso' : 'non connesso';
   els.status.className = 'pill';
   els.status.style.fontSize = '18px';
   els.status.style.fontWeight = '800';
@@ -65,13 +64,13 @@ function setConnState(connected){
 }
 setConnState(false);
 
-// ====== Tasto "Installa" in alto a destra ======
+// === Tasto “Installa” in alto a destra (senza toccare l’HTML) ===
 const headerRight = document.querySelector('header .right');
 const installBtn = document.createElement('button');
 installBtn.textContent = 'Installa';
 installBtn.style.marginLeft = '8px';
 installBtn.style.display = 'none';
-headerRight && headerRight.appendChild(installBtn);
+if (headerRight) headerRight.appendChild(installBtn);
 
 window.addEventListener('beforeinstallprompt', (e)=>{
   e.preventDefault();
@@ -86,23 +85,23 @@ installBtn.addEventListener('click', async ()=>{
   installBtn.style.display = 'none';
 });
 
-// ====== Sezione "Scambio chiavi": nascondi testi ======
+// === Sezione “Scambio chiavi”: rimuovi SOLO le frasi; chiudi alla partenza; riapribile con doppio tap sullo stato ===
 const sessionSection = els.startSession && els.startSession.closest('section');
 const sessionTitle = sessionSection ? sessionSection.querySelector('[data-i18n="session"]') : null;
 const sessionHint  = sessionSection ? sessionSection.querySelector('[data-i18n="sessionHint"]') : null;
-sessionTitle && (sessionTitle.style.display = 'none');
-sessionHint  && (sessionHint.style.display  = 'none');
+if (sessionTitle) sessionTitle.style.display = 'none';
+if (sessionHint)  sessionHint.style.display  = 'none';
 
-// Ri-apertura/chiusura sezione chiavi con doppio click sullo stato
-function showSession(){ if(sessionSection){ sessionSection.style.display=''; } }
-function hideSession(){ if(sessionSection){ sessionSection.style.display='none'; } }
+function showSession(){ if(sessionSection) sessionSection.style.display=''; }
+function hideSession(){ if(sessionSection) sessionSection.style.display='none'; }
+// Niente tasto “Chiavi”: per riaprire/chiudere fai doppio click sull’etichetta di stato
 els.status && els.status.addEventListener('dblclick', ()=>{
   if (!sessionSection) return;
   const hidden = sessionSection.style.display === 'none';
   hidden ? showSession() : hideSession();
 });
 
-// ====== Chat UI ======
+// === Chat UI ===
 function addMsg(text, who='peer'){
   const el = document.createElement('div');
   el.className = 'msg ' + who;
@@ -129,11 +128,11 @@ function addAudioMsg(url, who='peer', durMs=null){
   setTimeout(()=>{ URL.revokeObjectURL(url); wrap.remove(); }, 5*60*1000);
 }
 
-// ====== E2E keys ======
+// === E2E ===
 async function ensureKeys(){
   if (!e2e.myPubRaw) {
     const pub = await e2e.init();
-    els.myPub && (els.myPub.value = pub);
+    if (els.myPub) els.myPub.value = pub;
     if (els.fingerprint){
       const fp = await e2e.myFingerprintHex();
       els.fingerprint.textContent = fp.slice(0,12);
@@ -141,7 +140,7 @@ async function ensureKeys(){
   }
 }
 
-// ====== WebSocket ======
+// === WebSocket ===
 function connect(){
   if (isConnecting || isConnected) return;
   const url = FORCED_WS;
@@ -183,7 +182,7 @@ function connect(){
   });
 }
 
-// Auto-connessione
+// === Auto-connessione + invio chiave mia quando pronto ===
 (async function autoStart(){
   await ensureKeys();
   connect();
@@ -197,7 +196,7 @@ function connect(){
   sendKeyWhenReady();
 })();
 
-// Avvia sessione: chiudi la sezione chiavi
+// === Avvia sessione: chiudi sezione; riapri con doppio click sullo stato ===
 els.startSession && els.startSession.addEventListener('click', async ()=>{
   await ensureKeys();
   const peerRaw = els.peerPub && els.peerPub.value.trim();
@@ -209,7 +208,7 @@ els.startSession && els.startSession.addEventListener('click', async ()=>{
   hideSession();
 });
 
-// Invio testo
+// === Invio TESTO: il tasto Invia invia SOLO messaggi di testo ===
 els.sendBtn && els.sendBtn.addEventListener('click', async ()=>{
   if (!isConnected) return alert('Non connesso');
   if (!e2e.ready) return alert('Sessione E2E non attiva');
@@ -231,7 +230,7 @@ els.input && els.input.addEventListener('keydown', (e)=>{
 // pulisci chat
 els.clearBtn && els.clearBtn.addEventListener('click', ()=>{ els.log.innerHTML = ''; });
 
-// Registrazione audio con pulsanti dedicati
+// === Registrazione AUDIO con pulsanti dedicati (recBtn / stopRecBtn) ===
 async function ensureMic(){
   if (mediaStream) return mediaStream;
   try{
@@ -251,6 +250,7 @@ function setRecUi(recording){
 
 if (els.recBtn && els.stopRecBtn){
   els.stopRecBtn.disabled = true;
+
   els.recBtn.addEventListener('click', async ()=>{
     if (!isConnected) return alert('Non connesso');
     if (!e2e.ready) return alert('Sessione E2E non attiva');
@@ -290,6 +290,7 @@ if (els.recBtn && els.stopRecBtn){
     els.recBtn.disabled = true;
     els.stopRecBtn.disabled = false;
   });
+
   els.stopRecBtn.addEventListener('click', ()=>{
     if (mediaRecorder && mediaRecorder.state !== 'inactive'){
       mediaRecorder.stop();
