@@ -71,7 +71,8 @@ window.addEventListener('DOMContentLoaded', () => {
     setTimeout(()=>{ URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
   }
 
-  async function blobToImage(blob){
+  // === Helper immagine / Base64 (robusti su smartphone) ===
+  function blobToImage(blob){
     return new Promise((resolve, reject)=>{
       const url = URL.createObjectURL(blob);
       const img = new Image();
@@ -81,24 +82,67 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
   function imageToJpegBlob(img, {maxW=1280, maxH=1280, quality=0.85}={}){
-  const w = img.naturalWidth, h = img.naturalHeight;
-  const r = Math.min(maxW/w, maxH/h, 1);
-  const nw = Math.round(w*r), nh = Math.round(h*r);
-  const canvas = document.createElement('canvas');
-  canvas.width = nw; canvas.height = nh;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0, nw, nh);
-  return new Promise((resolve)=>{
-    if (canvas.toBlob){
-      canvas.toBlob(b => resolve({ blob: b, width: nw, height: nh }), 'image/jpeg', quality);
-    } else {
-      // fallback per browser senza toBlob
-      const dataURL = canvas.toDataURL('image/jpeg', quality);
-      fetch(dataURL).then(r => r.blob()).then(b => resolve({ blob: b, width: nw, height: nh }));
-    }
-  });
-}
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const r = Math.min(maxW/w, maxH/h, 1);
+    const nw = Math.round(w*r), nh = Math.round(h*r);
+    const canvas = document.createElement('canvas');
+    canvas.width = nw; canvas.height = nh;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, nw, nh);
+    return new Promise((resolve)=>{
+      if (canvas.toBlob){
+        canvas.toBlob(b => resolve({ blob: b, width: nw, height: nh }), 'image/jpeg', quality);
+      } else {
+        // fallback per browser senza toBlob
+        const dataURL = canvas.toDataURL('image/jpeg', quality);
+        fetch(dataURL).then(r => r.blob()).then(b => resolve({ blob: b, width: nw, height: nh }));
+      }
+    });
+  }
+  // Converte un Blob in base64 in modo sicuro (niente stack overflow)
+  function blobToBase64(blob){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result || '';
+        const b64 = String(dataUrl).split(',')[1] || ''; // rimuove "data:...;base64,"
+        resolve(b64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  // Base64 -> ArrayBuffer per ricostruire il Blob in ricezione
+  function b64ToAb(b64){
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
 
+  // Ridimensiona/ricomprime in modo adattivo fino a stare sotto un budget di lunghezza Base64
+  async function adaptAndEncodeImage(originalImg){
+    const targets = [
+      {max:1280, q:0.85},
+      {max:960,  q:0.80},
+      {max:720,  q:0.75},
+      {max:640,  q:0.72},
+    ];
+    // soglia “sicura” per molti device (~400–500 KB base64)
+    const SAFE_B64_LEN = 700_000; // ~525 KB reali (base64 ha overhead ~33%)
+
+    for (const t of targets){
+      const {blob, width, height} = await imageToJpegBlob(originalImg, {maxW:t.max, maxH:t.max, quality:t.q});
+      const b64 = await blobToBase64(blob);
+      if (b64.length <= SAFE_B64_LEN){
+        return { b64, width, height, blob };
+      }
+    }
+    // se ancora troppo grande, usa l’ultima versione (più piccola) comunque
+    const {blob, width, height} = await imageToJpegBlob(originalImg, {maxW:640, maxH:640, quality:0.7});
+    const b64 = await blobToBase64(blob);
+    return { b64, width, height, blob };
+  }
 
   // ===== I18N & SW =====
   els.langSel && els.langSel.addEventListener('change', () => applyLang(els.langSel.value));
@@ -273,15 +317,13 @@ window.addEventListener('DOMContentLoaded', () => {
         }
 
         if (msg.type === 'image') {
-  const b64 = await e2e.decrypt(msg.iv, msg.ct);     // stringa Base64
-  const buf = b64ToAb(b64);                           // -> ArrayBuffer
-  const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
-  const url = URL.createObjectURL(blob);
-  addImage(url, 'peer');
-  return;
-}
-
-
+          const b64 = await e2e.decrypt(msg.iv, msg.ct);               // base64 string
+          const buf = b64ToAb(b64);                                    // -> ArrayBuffer
+          const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          addImage(url, 'peer');
+          return;
+        }
       } catch (e) {
         console.error('[WS] message error:', e);
       }
@@ -394,34 +436,6 @@ window.addEventListener('DOMContentLoaded', () => {
     cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
     galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
   }
-  // === Helper Base64 per ArrayBuffer <-> stringa ===
-function abToB64(buf){
-  const bytes = new Uint8Array(buf);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin);
-}
-function b64ToAb(b64){
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes.buffer;
-}
-// Converte un Blob in Base64 in modo sicuro (niente stack overflow)
-function blobToBase64(blob){
-  return new Promise((resolve, reject)=>{
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result || '';
-      const b64 = String(dataUrl).split(',')[1] || ''; // rimuove "data:...;base64,"
-      resolve(b64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-
 
   async function handleFile(file){
     if (!file) return;
@@ -429,15 +443,13 @@ function blobToBase64(blob){
     if (!e2e.ready) return alert('Scambio chiavi incompleto: premi "Avvia sessione" o attendi la chiave del peer.');
     try{
       const img = await blobToImage(file);
-const {blob, width, height} = await imageToJpegBlob(img, {maxW:1280, maxH:1280, quality:0.85}); // un filo più piccolo aiuta i device
-const b64 = await blobToBase64(blob);                       // <-- NO stack overflow
-const { iv, ct } = await e2e.encrypt(b64);
-if (ws && ws.readyState === 1){
-  ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:width, h:height }));
-}
-const url = URL.createObjectURL(blob);
-addImage(url, 'me');
-
+      const { b64, width, height, blob } = await adaptAndEncodeImage(img); // adattivo, no stack overflow
+      const { iv, ct } = await e2e.encrypt(b64);
+      if (ws && ws.readyState === 1){
+        ws.send(JSON.stringify({type:'image', iv, ct, mime:'image/jpeg', w:width, h:height}));
+      }
+      const url = URL.createObjectURL(blob);
+      addImage(url, 'me');
     }catch(err){
       console.error('Errore invio foto:', err);
       alert('Errore invio foto: ' + (err && err.message ? err.message : err));
