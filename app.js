@@ -39,6 +39,7 @@ window.addEventListener('DOMContentLoaded', () => {
     log:         $('#log'),
     input:       $('#msgInput'),
     sendBtn:     $('#sendBtn'),
+    composer:    document.querySelector('.composer'),
   };
 
   // ===== Utils =====
@@ -54,6 +55,42 @@ window.addEventListener('DOMContentLoaded', () => {
     els.log.appendChild(li);
     els.log.scrollTop = els.log.scrollHeight;
     setTimeout(() => li.remove(), 5 * 60 * 1000); // autodistruzione dopo 5 min
+  }
+  function addImage(url, who='peer'){
+    if (!els.log) return;
+    const li = document.createElement('li');
+    li.className = who;
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = 'foto';
+    img.style.maxWidth = '70%';
+    img.style.borderRadius = '8px';
+    li.appendChild(img);
+    els.log.appendChild(li);
+    els.log.scrollTop = els.log.scrollHeight;
+    setTimeout(()=>{ URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
+  }
+
+  async function blobToImage(blob){
+    return new Promise((resolve, reject)=>{
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = ()=>{ URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Immagine non valida')); };
+      img.src = url;
+    });
+  }
+  function imageToJpegBlob(img, {maxW=1600, maxH=1600, quality=0.85}={}){
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const ratio = Math.min(maxW/w, maxH/h, 1);
+    const nw = Math.round(w*ratio), nh = Math.round(h*ratio);
+    const canvas = document.createElement('canvas');
+    canvas.width = nw; canvas.height = nh;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, nw, nh);
+    return new Promise((resolve)=>{
+      canvas.toBlob((b)=> resolve({blob:b, width:nw, height:nh}), 'image/jpeg', quality);
+    });
   }
 
   // ===== I18N & SW =====
@@ -83,10 +120,10 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   setConnState(false);
 
-  // ===== Install PWA (usa il bottone esistente) =====
+  // ===== Install PWA =====
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
-    deferredPrompt = e; // salviamo il prompt per il click utente
+    deferredPrompt = e;
   });
   els.installBtn && els.installBtn.addEventListener('click', async () => {
     if (deferredPrompt) {
@@ -122,7 +159,7 @@ window.addEventListener('DOMContentLoaded', () => {
     keysGenerated = true;
   }
 
-  // Copia chiave (usa il bottone esistente)
+  // Copia chiave
   els.copyMyBtn && els.copyMyBtn.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(els.myPub?.value || '');
@@ -187,7 +224,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
     ws.addEventListener('error', (ev) => {
       console.error('[WS] error', ev);
-      // l'errore generico spesso precede la close; il retry lo gestisce close()
     });
 
     ws.addEventListener('message', async (ev) => {
@@ -228,6 +264,14 @@ window.addEventListener('DOMContentLoaded', () => {
           addMsg(plain, 'peer');
           return;
         }
+
+        if (msg.type === 'image') {
+          const buf = await e2e.decryptBytes(msg.iv, msg.ct);
+          const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          addImage(url, 'peer');
+          return;
+        }
       } catch (e) {
         console.error('[WS] message error:', e);
       }
@@ -243,6 +287,8 @@ window.addEventListener('DOMContentLoaded', () => {
   (async function autoStart() {
     await ensureKeys();
     connect();
+    // crea i controlli foto (accanto a "Invia") solo a pagina pronta
+    ensurePhotoControls();
   })();
 
   // ===== Avvia Sessione =====
@@ -304,6 +350,60 @@ window.addEventListener('DOMContentLoaded', () => {
   els.clearBtn && els.clearBtn.addEventListener('click', () => {
     if (els.log) els.log.innerHTML = '';
   });
+
+  // ===== Foto: scatta o scegli dalla galleria (senza cambiare HTML) =====
+  function ensurePhotoControls(){
+    if (!els.composer || document.getElementById('photoBtn')) return;
+    const photoBtn = document.createElement('button');
+    photoBtn.id = 'photoBtn';
+    photoBtn.textContent = 'Foto';
+    photoBtn.title = 'Scatta o scegli dalla galleria';
+    photoBtn.style.marginLeft = '6px';
+    els.composer.appendChild(photoBtn);
+
+    // due input invisibili: camera & galleria
+    const cameraInput  = document.createElement('input');
+    cameraInput.type = 'file';
+    cameraInput.accept = 'image/*';
+    cameraInput.capture = 'environment';
+    cameraInput.style.display = 'none';
+
+    const galleryInput = document.createElement('input');
+    galleryInput.type = 'file';
+    galleryInput.accept = 'image/*';
+    galleryInput.style.display = 'none';
+
+    document.body.appendChild(cameraInput);
+    document.body.appendChild(galleryInput);
+
+    photoBtn.addEventListener('click', ()=>{
+      const scatta = window.confirm('Scattare una foto?\nPremi "Annulla" per scegliere dalla galleria.');
+      (scatta ? cameraInput : galleryInput).click();
+    });
+
+    cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
+    galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
+  }
+
+  async function handleFile(file){
+    if (!file) return;
+    if (!isConnected) return alert('Non connesso');
+    if (!e2e.ready) return alert('Scambio chiavi incompleto: premi "Avvia sessione" o attendi la chiave del peer.');
+    try{
+      const img = await blobToImage(file);
+      const {blob, width, height} = await imageToJpegBlob(img, {maxW:1600, maxH:1600, quality:0.85});
+      const buf = await blob.arrayBuffer();
+      const {iv, ct} = await e2e.encryptBytes(buf);
+      if (ws && ws.readyState === 1){
+        ws.send(JSON.stringify({type:'image', iv, ct, mime:'image/jpeg', w:width, h:height}));
+      }
+      const url = URL.createObjectURL(blob);
+      addImage(url, 'me');
+    }catch(err){
+      console.error('Errore invio foto:', err);
+      alert('Errore invio foto: ' + (err && err.message ? err.message : err));
+    }
+  }
 
   // ===== Riconnessione quando torni in foreground =====
   document.addEventListener('visibilitychange', () => {
