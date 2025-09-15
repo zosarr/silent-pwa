@@ -115,7 +115,7 @@ function connect(url){
   }
   try {
     isConnecting = true;
-    ws = new WebSocket(url);
+    ws = WebSocket(url);
 
     ws.onopen = ()=>{
       clearTimeout(reconnectTimer); reconnectTimer = null;
