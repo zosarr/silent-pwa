@@ -55,4 +55,48 @@ dialog{border-radius:12px;border:1px solid rgba(0,0,0,.1);background:#fff;color:
 .status-box.disconnected {
   background-color: #f44336; /* rosso */
 }
+/* Nasconde solo il box di stato sotto al titolo */
+#connStatus { display: none !important; }
+/* Layout base lista messaggi */
+.messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Bubble comune */
+.messages li {
+  max-width: 75%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  line-height: 1.35;
+  word-wrap: break-word;
+  box-shadow: 0 1px 2px rgba(0,0,0,.08);
+}
+
+/* I tuoi messaggi: verde, a destra */
+.messages li.me {
+  align-self: flex-end;
+  background: #16a34a;    /* verde */
+  color: #fff;
+}
+
+/* Messaggi in arrivo: grigio chiaro, a sinistra */
+.messages li.peer {
+  align-self: flex-start;
+  background: #f3f4f6;    /* grigio chiaro */
+  color: #111;
+}
+
+/* Immagini dentro le bubble: non sforare */
+.messages li img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
 
