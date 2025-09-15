@@ -56,7 +56,7 @@ if (els.connectBtn) els.connectBtn.style.display = 'none'; // no "Connetti" butt
 function setConnState(connected){
   isConnected = !!connected;
   const txt = connected ? 'connesso' : 'non connesso';
-  els.status.textContent = txt;
+  els.status.textContent = 'txt;
   els.status.className = 'pill';
   els.status.style.fontSize = '18px';
   els.status.style.fontWeight = '800';
