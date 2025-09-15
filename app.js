@@ -1,447 +1,321 @@
-import {E2E} from './crypto.js';
-import {STRINGS, applyLang} from './i18n.js';
+import { E2E } from './crypto.js';
+import { applyLang } from './i18n.js';
 
-// === URL WebSocket (connessione automatica) ===
-const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
+window.addEventListener('DOMContentLoaded', () => {
+  // ===== Config =====
+  const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
+  const qs = new URLSearchParams(location.search);
+  const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
 
-let ws = null;
-let e2e = new E2E();
-let isConnecting = false;
-let isConnected = false;
+  // ===== Stato =====
+  let ws = null;
+  let e2e = new E2E();
+  let isConnecting = false;
+  let isConnected = false;
+  let reconnectTimer = null;
+  let backoffMs = 2000; // 2s → 4s → 8s … max 15s
 
-// Registrazione audio
-let mediaStream = null;
-let mediaRecorder = null;
-let audioChunks = [];
-let recStart = 0;
+  let deferredPrompt = null;
 
-// PWA install
-let deferredPrompt = null;
-
-const els = {
-  log: document.getElementById('log'),
-  input: document.getElementById('msgInput'),
-  sendBtn: document.getElementById('sendBtn'),
-  myPub: document.getElementById('myPub'),
-  peerPub: document.getElementById('peerPub'),
-  startSession: document.getElementById('startSession'),
-  connectBtn: document.getElementById('connectBtn'),
-  status: document.getElementById('status'),
-  fingerprint: document.getElementById('fingerprint'),
-  langSel: document.getElementById('langSel'),
-  clearBtn: document.getElementById('clearBtn'),
-  wsUrl: document.getElementById('wsUrl'),
-  recBtn: document.getElementById('recBtn'),
-  stopRecBtn: document.getElementById('stopRecBtn')
-};
-
-// Riferimento al titolo "Connessione"
-const connTitle = document.querySelector('[data-i18n="connection"]');
-
-function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
-
-// I18N
-els.langSel && els.langSel.addEventListener('change', ()=> applyLang(els.langSel.value));
-applyLang('it');
-
-// Service worker
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(()=>{});
-}
-
-// === Imposta e nascondi la casella URL WS (niente bottone "Connetti") ===
-const qs = new URLSearchParams(location.search);
-const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
-if (els.wsUrl) { els.wsUrl.value = FORCED_WS; els.wsUrl.style.display = 'none'; }
-if (els.connectBtn) els.connectBtn.style.display = 'none';
-
-// === Sposta le etichette SOPRA alle caselle (senza toccare l'HTML) ===
-(function fixLabelsAbove(){
-  if (els.myPub){
-    const labelMy = (els.myPub.parentElement || document).querySelector('[data-i18n="myPub"]');
-    if (labelMy && labelMy.nextSibling !== els.myPub){
-      labelMy.parentElement.insertBefore(labelMy, els.myPub);
-    }
-    labelMy && (labelMy.style.display = 'block', labelMy.style.fontWeight = '600', labelMy.style.marginBottom = '6px');
-  }
-  if (els.peerPub){
-    const labelPeer = (els.peerPub.parentElement || document).querySelector('[data-i18n="peerPub"]');
-    if (labelPeer && labelPeer.nextSibling !== els.peerPub){
-      labelPeer.parentElement.insertBefore(labelPeer, els.peerPub);
-    }
-    labelPeer && (labelPeer.style.display = 'block', labelPeer.style.fontWeight = '600', labelPeer.style.marginBottom = '6px');
-  }
-})();
-
-// === Stato “connesso / non connesso”: verde/rosso accanto a "Connessione:" e rimuovi badge sotto ===
-function setConnState(connected){
-  isConnected = !!connected;
-  const txt = connected ? 'connesso' : 'non connesso';
-  const color = connected ? '#16a34a' : '#dc2626';
-
-  // titolo con i due punti e lo stato colorato
-  if (connTitle){
-    connTitle.textContent = `Connessione: ${txt}`;
-    connTitle.style.color = color;          // colore della scritta in alto
-    connTitle.style.fontWeight = '700';
-  }
-
-  // nascondi completamente il badge di stato sotto
-  if (els.status){
-    els.status.style.display = 'none';
-  }
-}
-setConnState(false);
-
-// === Tasto “Installa” in alto a destra — sempre visibile ===
-const headerRight = document.querySelector('header .right');
-const installBtn = document.createElement('button');
-installBtn.textContent = 'Installa';
-installBtn.style.marginLeft = '8px';
-installBtn.style.display = '';  // mostra sempre
-if (headerRight) headerRight.appendChild(installBtn);
-
-window.addEventListener('beforeinstallprompt', (e)=>{
-  e.preventDefault();
-  deferredPrompt = e;
-});
-installBtn.addEventListener('click', async ()=>{
-  // Se Chrome/Android fornisce il prompt nativo
-  if (deferredPrompt){
-    deferredPrompt.prompt();
-    try { await deferredPrompt.userChoice; } catch {}
-    deferredPrompt = null;
-    return;
-  }
-  // iOS/Safari o quando il prompt non è disponibile: istruzioni rapide
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-  if (isStandalone){
-    alert('L’app è già installata.');
-  } else if (isIOS){
-    alert('Su iPhone/iPad: 1) Tocca • Condividi • 2) "Aggiungi alla schermata Home".');
-  } else {
-    alert('Se non vedi il prompt, usa il menu del browser per "Installa app" o "Aggiungi alla schermata Home".');
-  }
-});
-
-// === Sezione “Scambio chiavi”: nascondi SOLO le frasi; chiudi dopo avvio; riapribile col doppio click sullo stato ===
-const sessionSection = els.startSession && els.startSession.closest('section');
-const sessionTitle = sessionSection ? sessionSection.querySelector('[data-i18n="session"]') : null;
-const sessionHint  = sessionSection ? sessionSection.querySelector('[data-i18n="sessionHint"]') : null;
-if (sessionTitle) sessionTitle.style.display = 'none';
-if (sessionHint)  sessionHint.style.display  = 'none';
-
-function showSession(){ if(sessionSection) sessionSection.style.display=''; }
-function hideSession(){ if(sessionSection) sessionSection.style.display='none'; }
-connTitle && connTitle.addEventListener('dblclick', ()=>{
-  if (!sessionSection) return;
-  const hidden = sessionSection.style.display === 'none';
-  hidden ? showSession() : hideSession();
-});
-
-// === Chat UI ===
-function addMsg(text, who='peer'){
-  const el = document.createElement('div');
-  el.className = 'msg ' + who;
-  el.innerHTML = escapeHtml(text);
-  els.log.appendChild(el);
-  els.log.scrollTop = els.log.scrollHeight;
-  setTimeout(()=> el.remove(), 5*60*1000);
-}
-function addAudioMsg(url, who='peer', durMs=null){
-  const wrap = document.createElement('div');
-  wrap.className = 'msg ' + who;
-  const audio = document.createElement('audio');
-  audio.controls = true;
-  audio.src = url;
-  if (durMs) {
-    const s = Math.round(durMs/1000);
-    const meta = document.createElement('small');
-    meta.textContent = ` ${s}s`;
-    wrap.appendChild(meta);
-  }
-  wrap.appendChild(audio);
-  els.log.appendChild(wrap);
-  els.log.scrollTop = els.log.scrollHeight;
-  setTimeout(()=>{ URL.revokeObjectURL(url); wrap.remove(); }, 5*60*1000);
-}
-function addImageMsg(url, who='peer'){
-  const wrap = document.createElement('div');
-  wrap.className = 'msg ' + who;
-  const img = document.createElement('img');
-  img.src = url;
-  img.alt = 'foto';
-  img.style.maxWidth = '70%';
-  img.style.borderRadius = '8px';
-  wrap.appendChild(img);
-  els.log.appendChild(wrap);
-  els.log.scrollTop = els.log.scrollHeight;
-  setTimeout(()=>{ URL.revokeObjectURL(url); wrap.remove(); }, 5*60*1000);
-}
-
-// === E2E ===
-async function ensureKeys(){
-  if (!e2e.myPubRaw) {
-    const pub = await e2e.init();
-    if (els.myPub) els.myPub.value = pub;
-    if (els.fingerprint){
-      const fp = await e2e.myFingerprintHex();
-      els.fingerprint.textContent = fp.slice(0,12);
-    }
-  }
-}
-
-// === Bottone “Copia chiave” sotto la mia casella (senza cambiare HTML) ===
-(function injectCopyMyKey(){
-  if (!els.myPub) return;
-  const btn = document.createElement('button');
-  btn.id = 'copyMyKey';
-  btn.textContent = 'Copia chiave';
-  btn.style.marginTop = '6px';
-  btn.addEventListener('click', async ()=>{
-    try{
-      await navigator.clipboard.writeText(els.myPub.value || '');
-      const old = connTitle && connTitle.textContent;
-      if (connTitle){
-        connTitle.textContent = 'Connessione: chiave copiata ✔';
-        setTimeout(()=> setConnState(isConnected), 1200);
-      }
-    }catch(e){ alert('Impossibile copiare: ' + e.message); }
-  });
-  els.myPub.parentElement && els.myPub.parentElement.insertBefore(btn, els.myPub.nextSibling);
-})();
-
-// === WebSocket ===
-function connect(){
-  if (isConnecting || isConnected) return;
-  const url = FORCED_WS;
-  isConnecting = true;
-  setConnState(false);
-  ws = new WebSocket(url);
-  ws.addEventListener('open', ()=>{
-    isConnecting = false;
-    setConnState(true);
-  });
-  ws.addEventListener('close', ()=>{
-    isConnecting = false;
-    setConnState(false);
-  });
-  ws.addEventListener('message', async (ev)=>{
-    try{
-      const msg = JSON.parse(ev.data);
-      if (msg.type === 'ping') return;
-      if (msg.type === 'key'){
-        await ensureKeys();
-        await e2e.setPeerPublicKey(msg.raw);
-        return;
-      }
-      if (msg.type === 'msg'){
-        if (!e2e.ready) return;
-        const plain = await e2e.decrypt(msg.iv, msg.ct);
-        addMsg(plain, 'peer');
-        return;
-      }
-      if (msg.type === 'audio'){
-        if (!e2e.ready) return;
-        const buf = await e2e.decryptBytes(msg.iv, msg.ct);
-        const blob = new Blob([buf], { type: msg.mime || 'audio/webm;codecs=opus' });
-        const url = URL.createObjectURL(blob);
-        addAudioMsg(url, 'peer', msg.dur);
-        return;
-      }
-      if (msg.type === 'image'){
-        if (!e2e.ready) return;
-        const buf = await e2e.decryptBytes(msg.iv, msg.ct);
-        const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
-        const url = URL.createObjectURL(blob);
-        addImageMsg(url, 'peer');
-        return;
-      }
-    }catch(e){ /* ignore */ }
-  });
-}
-
-// === Auto-connessione + invio chiave mia quando pronto ===
-(async function autoStart(){
-  await ensureKeys();
-  connect();
-  const sendKeyWhenReady = ()=>{
-    if (ws && ws.readyState === 1){
-      ws.send(JSON.stringify({type:'key', raw: els.myPub ? els.myPub.value : ''}));
-    } else {
-      setTimeout(sendKeyWhenReady, 300);
-    }
+  // ===== DOM =====
+  const $ = (s) => document.querySelector(s);
+  const els = {
+    langSel:     $('#langSelect'),
+    installBtn:  $('#installBtn'),
+    clearBtn:    $('#clearBtn'),
+    connTitle:   document.querySelector('[data-i18n="connection"]'),
+    connStatus:  $('#connStatus'),
+    myPub:       $('#myPub'),
+    copyMyBtn:   $('#copyMyPubBtn'),
+    peerPub:     $('#peerPub'),
+    startBtn:    $('#startSessionBtn'),
+    log:         $('#log'),
+    input:       $('#msgInput'),
+    sendBtn:     $('#sendBtn'),
   };
-  sendKeyWhenReady();
-})();
 
-// === Avvia sessione: chiudi sezione; riapri con doppio click sul titolo “Connessione” ===
-els.startSession && els.startSession.addEventListener('click', async ()=>{
-  await ensureKeys();
-  const peerRaw = els.peerPub && els.peerPub.value.trim();
-  if (!peerRaw) return alert('Incolla la chiave del peer');
-  await e2e.setPeerPublicKey(peerRaw);
-  if (ws && ws.readyState === 1){
-    ws.send(JSON.stringify({type:'key', raw: els.myPub ? els.myPub.value : ''}));
+  // ===== Utils =====
+  const escapeHtml = (s) => (s ? s.replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m])) : '');
+
+  function addMsg(text, who = 'peer') {
+    if (!els.log) return;
+    const li = document.createElement('li');
+    li.className = who;
+    li.innerHTML = escapeHtml(text);
+    els.log.appendChild(li);
+    els.log.scrollTop = els.log.scrollHeight;
+    setTimeout(() => li.remove(), 5 * 60 * 1000); // autodistruzione dopo 5 min
   }
-  hideSession();
-});
-
-// === Invio TESTO ===
-els.sendBtn && els.sendBtn.addEventListener('click', async ()=>{
-  if (!isConnected) return alert('Non connesso');
-  if (!e2e.ready) return alert('Sessione E2E non attiva');
-  const text = els.input.value.trim();
-  if (!text) return;
-  const {iv, ct} = await e2e.encrypt(text);
-  if (ws && ws.readyState === 1){
-    ws.send(JSON.stringify({type:'msg', iv, ct}));
-  }
-  addMsg(text, 'me');
-  els.input.value = '';
-});
-
-// Enter to send
-els.input && els.input.addEventListener('keydown', (e)=>{
-  if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); els.sendBtn.click(); }
-});
-
-// pulisci chat
-els.clearBtn && els.clearBtn.addEventListener('click', ()=>{ els.log.innerHTML = ''; });
-
-// === AUDIO: pulsanti rec/stop dedicati ===
-async function ensureMic(){
-  if (mediaStream) return mediaStream;
-  try{
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    return mediaStream;
-  }catch(err){
-    alert('Microfono non disponibile: ' + err.message);
-    throw err;
-  }
-}
-function setRecUi(recording){
-  const color = recording ? '#dc2626' : (isConnected ? '#16a34a' : '#dc2626');
-  if (connTitle){
-    connTitle.style.color = color;
-    connTitle.textContent = recording ? 'Connessione: REC…' : `Connessione: ${isConnected ? 'connesso' : 'non connesso'}`;
-  }
-}
-if (els.recBtn && els.stopRecBtn){
-  els.stopRecBtn.disabled = true;
-  els.recBtn.addEventListener('click', async ()=>{
-    if (!isConnected) return alert('Non connesso');
-    if (!e2e.ready) return alert('Sessione E2E non attiva');
-    await ensureMic();
-    audioChunks = [];
-    let mime = 'audio/webm;codecs=opus';
-    try{
-      mediaRecorder = new MediaRecorder(mediaStream, { mimeType: mime });
-    }catch{
-      try { mime = 'audio/webm'; mediaRecorder = new MediaRecorder(mediaStream, { mimeType: mime }); }
-      catch { mediaRecorder = new MediaRecorder(mediaStream); }
+  function addAudio(url, who='peer', durMs=null){
+    if (!els.log) return;
+    const li = document.createElement('li');
+    li.className = who;
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.src = url;
+    if (durMs){
+      const s = Math.round(durMs/1000);
+      const small = document.createElement('small');
+      small.textContent = ` ${s}s`;
+      li.appendChild(small);
     }
-    mediaRecorder.ondataavailable = (ev)=>{ if (ev.data && ev.data.size) audioChunks.push(ev.data); };
-    mediaRecorder.onstop = async ()=>{
-      try{
-        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-        const dur = Date.now() - recStart;
-        const buf = await blob.arrayBuffer();
-        const {iv, ct} = await e2e.encryptBytes(buf);
-        if (ws && ws.readyState === 1){
-          ws.send(JSON.stringify({type:'audio', iv, ct, mime: blob.type, dur}));
+    li.appendChild(audio);
+    els.log.appendChild(li);
+    els.log.scrollTop = els.log.scrollHeight;
+    setTimeout(()=>{ URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
+  }
+  function addImage(url, who='peer'){
+    if (!els.log) return;
+    const li = document.createElement('li');
+    li.className = who;
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = 'foto';
+    img.style.maxWidth = '70%';
+    img.style.borderRadius = '8px';
+    li.appendChild(img);
+    els.log.appendChild(li);
+    els.log.scrollTop = els.log.scrollHeight;
+    setTimeout(()=>{ URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
+  }
+
+  // ===== I18N & SW =====
+  els.langSel && els.langSel.addEventListener('change', () => applyLang(els.langSel.value));
+  applyLang('it');
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+
+  // ===== Stato Connessione =====
+  function setConnState(connected) {
+    isConnected = !!connected;
+    const txt = connected ? 'connesso' : 'non connesso';
+    const color = connected ? '#16a34a' : '#dc2626';
+
+    if (els.connTitle) {
+      els.connTitle.textContent = `Connessione: ${txt}`;
+      els.connTitle.style.color = color;
+      els.connTitle.style.fontWeight = '700';
+    }
+    if (els.connStatus) {
+      els.connStatus.textContent = connected ? 'Connesso' : 'Non connesso';
+      els.connStatus.classList.toggle('connected', connected);
+      els.connStatus.classList.toggle('disconnected', !connected);
+    }
+  }
+  setConnState(false);
+
+  // ===== Install PWA (usa il tuo bottone esistente) =====
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e; // salviamo il prompt per il click utente
+  });
+  els.installBtn && els.installBtn.addEventListener('click', async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      try { await deferredPrompt.userChoice; } catch {}
+      deferredPrompt = null;
+      return;
+    }
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if (isStandalone) alert('L’app è già installata.');
+    else if (isIOS) alert('iPhone/iPad: 1) Condividi • 2) Aggiungi alla schermata Home.');
+    else alert('Apri il menu del browser → “Installa app” / “Aggiungi alla schermata Home”.');
+  });
+
+  // ===== E2E =====
+  async function ensureKeys() {
+    if (!e2e.myPubRaw) {
+      const pub = await e2e.init();
+      if (els.myPub) els.myPub.value = pub;
+    }
+  }
+
+  // Copia chiave (usa il tuo bottone esistente)
+  els.copyMyBtn && els.copyMyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(els.myPub?.value || '');
+      // feedback veloce: ripristino dopo poco
+      const base = els.connTitle && els.connTitle.textContent || 'Connessione';
+      if (els.connTitle) {
+        els.connTitle.textContent = 'Connessione: chiave copiata ✔';
+        setTimeout(() => setConnState(isConnected), 1200);
+      }
+    } catch (e) {
+      alert('Impossibile copiare: ' + e.message);
+    }
+  });
+
+  // ===== WebSocket =====
+  function humanCloseReason(ev) {
+    if (location.protocol === 'https:' && FORCED_WS.startsWith('ws://')) {
+      return 'Mixed Content: la pagina è HTTPS ma il WS è ws:// (usa wss://)';
+    }
+    if (ev.code === 1006) return 'Handshake/TLS/Server irraggiungibile';
+    if (ev.code === 1000) return 'Chiusura normale';
+    if (ev.code === 1001) return 'Server riavviato o pagina cambiata';
+    return ev.reason || '';
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    backoffMs = Math.min(backoffMs * 2, 15000);
+    reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, backoffMs);
+  }
+
+  function connect() {
+    if (isConnecting || isConnected) return;
+    isConnecting = true;
+    setConnState(false);
+
+    try {
+      console.log('[WS] connecting to:', FORCED_WS);
+      ws = new WebSocket(FORCED_WS);
+    } catch (e) {
+      console.error('[WS] constructor error:', e);
+      isConnecting = false;
+      scheduleReconnect();
+      return;
+    }
+
+    ws.addEventListener('open', async () => {
+      console.log('[WS] open');
+      isConnecting = false;
+      setConnState(true);
+      backoffMs = 2000;
+      await ensureKeys();
+      const myRaw = els.myPub?.value || '';
+      try { ws.send(JSON.stringify({ type: 'key', raw: myRaw })); } catch {}
+    });
+
+    ws.addEventListener('close', (ev) => {
+      console.warn('[WS] close', ev.code, ev.reason);
+      isConnecting = false;
+      setConnState(false);
+      console.warn('[WS] reason:', humanCloseReason(ev));
+      scheduleReconnect();
+    });
+
+    ws.addEventListener('error', (ev) => {
+      console.error('[WS] error', ev);
+      // l'errore generico spesso precede la close; il retry lo gestisce close()
+    });
+
+    ws.addEventListener('message', async (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'ping') return;
+
+        if (msg.type === 'key') {
+          await ensureKeys();
+          await e2e.setPeerPublicKey(msg.raw);
+          if (els.connTitle) els.connTitle.textContent = 'Connessione: connesso (E2E attiva)';
+          return;
         }
-        const url = URL.createObjectURL(blob);
-        addAudioMsg(url, 'me', dur);
-      }catch(err){
-        console.error(err);
-        alert('Errore invio audio: ' + err.message);
-      }finally{
-        setRecUi(false);
-        els.recBtn.disabled = false;
-        els.stopRecBtn.disabled = true;
+
+        if (!e2e.ready) return; // ignora payload se E2E non ancora attiva
+
+        if (msg.type === 'msg') {
+          const plain = await e2e.decrypt(msg.iv, msg.ct);
+          addMsg(plain, 'peer');
+          return;
+        }
+
+        if (msg.type === 'audio') {
+          const buf = await e2e.decryptBytes(msg.iv, msg.ct);
+          const blob = new Blob([buf], { type: msg.mime || 'audio/webm;codecs=opus' });
+          const url = URL.createObjectURL(blob);
+          addAudio(url, 'peer', msg.dur);
+          return;
+        }
+
+        if (msg.type === 'image') {
+          const buf = await e2e.decryptBytes(msg.iv, msg.ct);
+          const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          addImage(url, 'peer');
+          return;
+        }
+      } catch (e) {
+        console.error('[WS] message error:', e);
       }
-    };
-    recStart = Date.now();
-    mediaRecorder.start();
-    setRecUi(true);
-    els.recBtn.disabled = true;
-    els.stopRecBtn.disabled = false;
-  });
-  els.stopRecBtn.addEventListener('click', ()=>{
-    if (mediaRecorder && mediaRecorder.state !== 'inactive'){
-      mediaRecorder.stop();
+    });
+  }
+
+  // keep-alive ping (alcuni hosting chiudono su inattività)
+  setInterval(() => {
+    try { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'ping', t: Date.now() })); } catch {}
+  }, 25000);
+
+  // auto start
+  (async function autoStart() {
+    await ensureKeys();
+    connect();
+  })();
+
+  // ===== Avvia Sessione =====
+  els.startBtn && els.startBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    await ensureKeys();
+    const peerRaw = (els.peerPub?.value || '').trim();
+    if (!peerRaw) return alert('Incolla la chiave del peer');
+
+    try {
+      await e2e.setPeerPublicKey(peerRaw); // ora e2e.ready = true
+      // reinvia la mia chiave, così il peer mi imposta
+      if (ws && ws.readyState === 1) {
+        const myRaw = els.myPub?.value || '';
+        ws.send(JSON.stringify({ type: 'key', raw: myRaw }));
+      }
+      // chiudi il <details> "Scambio chiavi"
+      const details = document.querySelector('details');
+      if (details) details.open = false;
+
+      if (els.connTitle) els.connTitle.textContent = 'Connessione: connesso (E2E attiva)';
+    } catch (err) {
+      console.error('Errore Avvia sessione:', err);
+      alert('Errore avvio sessione: ' + (err && err.message ? err.message : err));
     }
   });
-}
 
-// === FOTO: scelta tra SCATTA o GALLERIA (senza cambiare HTML) ===
-(function injectPhotoControls(){
-  if (!els.sendBtn) return;
-  const photoBtn = document.createElement('button');
-  photoBtn.id = 'photoBtn';
-  photoBtn.textContent = 'Foto';
-  photoBtn.style.marginLeft = '6px';
-  els.sendBtn.parentElement && els.sendBtn.parentElement.appendChild(photoBtn);
-
-  const cameraInput  = document.createElement('input');
-  cameraInput.type = 'file'; cameraInput.accept = 'image/*'; cameraInput.capture = 'environment';
-  cameraInput.style.display = 'none';
-  const galleryInput = document.createElement('input');
-  galleryInput.type = 'file'; galleryInput.accept = 'image/*';
-  galleryInput.style.display = 'none';
-  document.body.appendChild(cameraInput);
-  document.body.appendChild(galleryInput);
-
-  photoBtn.addEventListener('click', async ()=>{
-    const scatta = window.confirm('Scattare una foto?\nPremi "Annulla" per scegliere dalla galleria.');
-    (scatta ? cameraInput : galleryInput).click();
-  });
-
-  async function handleFile(file){
-    if (!file) return;
+  // ===== Invia messaggio di testo =====
+  els.sendBtn && els.sendBtn.addEventListener('click', async () => {
     if (!isConnected) return alert('Non connesso');
-    if (!e2e.ready) return alert('Sessione E2E non attiva');
+    if (!e2e.ready) return alert('Scambio chiavi incompleto: premi "Avvia sessione" o attendi la chiave del peer.');
+    const text = (els.input?.value || '').trim();
+    if (!text) return;
 
-    try{
-      const img = await blobToImage(file);
-      const {blob, width, height} = await imageToJpegBlob(img, {maxW:1600, maxH:1600, quality:0.85});
-      const buf = await blob.arrayBuffer();
-      const {iv, ct} = await e2e.encryptBytes(buf);
-      if (ws && ws.readyState === 1){
-        ws.send(JSON.stringify({type:'image', iv, ct, mime:'image/jpeg', w:width, h:height}));
+    try {
+      const { iv, ct } = await e2e.encrypt(text);
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'msg', iv, ct }));
       }
-      const url = URL.createObjectURL(blob);
-      addImageMsg(url, 'me');
-    }catch(err){
-      console.error(err);
-      alert('Errore invio foto: ' + err.message);
+      addMsg(text, 'me');
+      if (els.input) els.input.value = '';
+    } catch (e) {
+      console.error('Send error:', e);
+      alert('Errore invio messaggio: ' + (e && e.message ? e.message : e));
     }
-  }
+  });
 
-  cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
-  galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
+  els.input && els.input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      els.sendBtn && els.sendBtn.click();
+    }
+  });
 
-  function blobToImage(blob){
-    return new Promise((resolve, reject)=>{
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = ()=>{ URL.revokeObjectURL(url); resolve(img); };
-      img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Immagine non valida')); };
-      img.src = url;
-    });
-  }
-  function imageToJpegBlob(img, {maxW=1600, maxH=1600, quality=0.85}={}){
-    const {naturalWidth:w, naturalHeight:h} = img;
-    const ratio = Math.min(maxW/w, maxH/h, 1);
-    const nw = Math.round(w*ratio), nh = Math.round(h*ratio);
-    const canvas = document.createElement('canvas');
-    canvas.width = nw; canvas.height = nh;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, nw, nh);
-    return new Promise((resolve)=>{
-      canvas.toBlob((b)=> resolve({blob:b, width:nw, height:nh}), 'image/jpeg', quality);
-    });
-  }
-})();
+  // ===== Pulisci chat =====
+  els.clearBtn && els.clearBtn.addEventListener('click', () => {
+    if (els.log) els.log.innerHTML = '';
+  });
+
+  // ===== Riconnessione quando torni in foreground =====
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && (!ws || ws.readyState !== 1)) connect();
+  });
+});
