@@ -160,7 +160,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const color = connected ? '#16a34a' : '#dc2626';
 
     if (els.connTitle) {
-      els.connTitle.textContent = `${txt}`;
+      els.connTitle.textContent = `Connessione ${txt}`;
       els.connTitle.style.color = color;
       els.connTitle.style.fontWeight = '700';
     }
