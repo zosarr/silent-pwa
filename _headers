@@ -1,2 +1,9 @@
-/*
-  Content-Security-Policy: default-src 'self'; connect-src 'self' wss://silent-backend.onrender.com https://silent-backend.onrender.com; img-src 'self' data: blob:; script-src 'self' https://cdn.jsdelivr.net https://cdn.jsdelivr.net/npm 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; object-src 'none'
+Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';
+img-src 'self' data: blob:;
+media-src 'self' blob:;
+connect-src 'self' wss://silent-backend.onrender.com ws: wss:;
+manifest-src 'self';
+worker-src 'self';
+object-src 'none'
+
+ 
