@@ -266,12 +266,15 @@ window.addEventListener('DOMContentLoaded', () => {
         }
 
         if (msg.type === 'image') {
-          const buf = await e2e.decryptBytes(msg.iv, msg.ct);
-          const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
-          const url = URL.createObjectURL(blob);
-          addImage(url, 'peer');
-          return;
-        }
+  const b64 = await e2e.decrypt(msg.iv, msg.ct);     // stringa Base64
+  const buf = b64ToAb(b64);                           // -> ArrayBuffer
+  const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
+  const url = URL.createObjectURL(blob);
+  addImage(url, 'peer');
+  return;
+}
+
+
       } catch (e) {
         console.error('[WS] message error:', e);
       }
@@ -384,6 +387,20 @@ window.addEventListener('DOMContentLoaded', () => {
     cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
     galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
   }
+  // === Helper Base64 per ArrayBuffer <-> stringa ===
+function abToB64(buf){
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+function b64ToAb(b64){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
 
   async function handleFile(file){
     if (!file) return;
@@ -393,10 +410,12 @@ window.addEventListener('DOMContentLoaded', () => {
       const img = await blobToImage(file);
       const {blob, width, height} = await imageToJpegBlob(img, {maxW:1600, maxH:1600, quality:0.85});
       const buf = await blob.arrayBuffer();
-      const {iv, ct} = await e2e.encryptBytes(buf);
-      if (ws && ws.readyState === 1){
-        ws.send(JSON.stringify({type:'image', iv, ct, mime:'image/jpeg', w:width, h:height}));
-      }
+const b64 = abToB64(buf);
+const { iv, ct } = await e2e.encrypt(b64);
+if (ws && ws.readyState === 1){
+  ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:width, h:height }));
+}
+
       const url = URL.createObjectURL(blob);
       addImage(url, 'me');
     }catch(err){
