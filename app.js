@@ -490,3 +490,4 @@ window.addEventListener('DOMContentLoaded', () => {
     if (document.visibilityState === 'visible' && (!ws || ws.readyState !== 1)) connect();
   });
 });
+
