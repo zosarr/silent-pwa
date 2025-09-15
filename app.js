@@ -17,18 +17,25 @@ window.addEventListener('DOMContentLoaded', () => {
 
   let deferredPrompt = null;
 
+  // Chiavi: evita rigenerazioni e cambi accidentali
+  let keysGenerated = false;   // genera solo una volta
+  let myPubExpected = null;    // valore “bloccato” della mia chiave (base64)
+
   // ===== DOM =====
   const $ = (s) => document.querySelector(s);
   const els = {
     langSel:     $('#langSelect'),
     installBtn:  $('#installBtn'),
     clearBtn:    $('#clearBtn'),
+
     connTitle:   document.querySelector('[data-i18n="connection"]'),
     connStatus:  $('#connStatus'),
+
     myPub:       $('#myPub'),
     copyMyBtn:   $('#copyMyPubBtn'),
     peerPub:     $('#peerPub'),
     startBtn:    $('#startSessionBtn'),
+
     log:         $('#log'),
     input:       $('#msgInput'),
     sendBtn:     $('#sendBtn'),
@@ -47,38 +54,6 @@ window.addEventListener('DOMContentLoaded', () => {
     els.log.appendChild(li);
     els.log.scrollTop = els.log.scrollHeight;
     setTimeout(() => li.remove(), 5 * 60 * 1000); // autodistruzione dopo 5 min
-  }
-  function addAudio(url, who='peer', durMs=null){
-    if (!els.log) return;
-    const li = document.createElement('li');
-    li.className = who;
-    const audio = document.createElement('audio');
-    audio.controls = true;
-    audio.src = url;
-    if (durMs){
-      const s = Math.round(durMs/1000);
-      const small = document.createElement('small');
-      small.textContent = ` ${s}s`;
-      li.appendChild(small);
-    }
-    li.appendChild(audio);
-    els.log.appendChild(li);
-    els.log.scrollTop = els.log.scrollHeight;
-    setTimeout(()=>{ URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
-  }
-  function addImage(url, who='peer'){
-    if (!els.log) return;
-    const li = document.createElement('li');
-    li.className = who;
-    const img = document.createElement('img');
-    img.src = url;
-    img.alt = 'foto';
-    img.style.maxWidth = '70%';
-    img.style.borderRadius = '8px';
-    li.appendChild(img);
-    els.log.appendChild(li);
-    els.log.scrollTop = els.log.scrollHeight;
-    setTimeout(()=>{ URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
   }
 
   // ===== I18N & SW =====
@@ -108,7 +83,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   setConnState(false);
 
-  // ===== Install PWA (usa il tuo bottone esistente) =====
+  // ===== Install PWA (usa il bottone esistente) =====
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e; // salviamo il prompt per il click utente
@@ -128,19 +103,29 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   // ===== E2E =====
-  async function ensureKeys() {
+  async function ensureKeys(){
+    if (keysGenerated) return; // evita rigenerazioni
     if (!e2e.myPubRaw) {
-      const pub = await e2e.init();
+      const pub = await e2e.init(); // genera una sola volta
+      myPubExpected = pub;
       if (els.myPub) els.myPub.value = pub;
+      // “blinda” il campo UI: non deve cambiare
+      if (els.myPub) {
+        els.myPub.readOnly = true;
+        els.myPub.addEventListener('input', ()=>{
+          if (myPubExpected && els.myPub.value !== myPubExpected) {
+            els.myPub.value = myPubExpected;
+          }
+        });
+      }
     }
+    keysGenerated = true;
   }
 
-  // Copia chiave (usa il tuo bottone esistente)
+  // Copia chiave (usa il bottone esistente)
   els.copyMyBtn && els.copyMyBtn.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(els.myPub?.value || '');
-      // feedback veloce: ripristino dopo poco
-      const base = els.connTitle && els.connTitle.textContent || 'Connessione';
       if (els.connTitle) {
         els.connTitle.textContent = 'Connessione: chiave copiata ✔';
         setTimeout(() => setConnState(isConnected), 1200);
@@ -188,7 +173,7 @@ window.addEventListener('DOMContentLoaded', () => {
       setConnState(true);
       backoffMs = 2000;
       await ensureKeys();
-      const myRaw = els.myPub?.value || '';
+      const myRaw = myPubExpected || (els.myPub?.value || '');
       try { ws.send(JSON.stringify({ type: 'key', raw: myRaw })); } catch {}
     });
 
@@ -212,32 +197,35 @@ window.addEventListener('DOMContentLoaded', () => {
 
         if (msg.type === 'key') {
           await ensureKeys();
-          await e2e.setPeerPublicKey(msg.raw);
-          if (els.connTitle) els.connTitle.textContent = 'Connessione: connesso (E2E attiva)';
+          const peerRaw = (msg.raw || '').trim();
+          const myRaw   = (myPubExpected || els.myPub?.value || '').trim();
+
+          // Se il server ributta la TUA chiave, ignorala
+          if (!peerRaw || peerRaw === myRaw) {
+            console.log('[E2E] ricevuta la mia chiave → ignoro');
+            return;
+          }
+
+          // Evita reset inutili
+          if (e2e.ready && e2e.peerPubRawB64 === peerRaw) return;
+
+          try {
+            await e2e.setPeerPublicKey(peerRaw);
+            e2e.peerPubRawB64 = peerRaw;
+            if (els.connTitle) els.connTitle.textContent = 'Connessione: connesso (E2E attiva)';
+            console.log('[E2E] peer key impostata');
+          } catch (e) {
+            console.error('setPeerPublicKey error:', e);
+          }
           return;
         }
 
-        if (!e2e.ready) return; // ignora payload se E2E non ancora attiva
+        // Non tentare decrypt se E2E non è pronta
+        if (!e2e.ready) return;
 
         if (msg.type === 'msg') {
           const plain = await e2e.decrypt(msg.iv, msg.ct);
           addMsg(plain, 'peer');
-          return;
-        }
-
-        if (msg.type === 'audio') {
-          const buf = await e2e.decryptBytes(msg.iv, msg.ct);
-          const blob = new Blob([buf], { type: msg.mime || 'audio/webm;codecs=opus' });
-          const url = URL.createObjectURL(blob);
-          addAudio(url, 'peer', msg.dur);
-          return;
-        }
-
-        if (msg.type === 'image') {
-          const buf = await e2e.decryptBytes(msg.iv, msg.ct);
-          const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
-          const url = URL.createObjectURL(blob);
-          addImage(url, 'peer');
           return;
         }
       } catch (e) {
@@ -260,17 +248,20 @@ window.addEventListener('DOMContentLoaded', () => {
   // ===== Avvia Sessione =====
   els.startBtn && els.startBtn.addEventListener('click', async (e) => {
     e.preventDefault();
-    await ensureKeys();
+    await ensureKeys(); // NON rigenera più
     const peerRaw = (els.peerPub?.value || '').trim();
     if (!peerRaw) return alert('Incolla la chiave del peer');
 
     try {
-      await e2e.setPeerPublicKey(peerRaw); // ora e2e.ready = true
+      await e2e.setPeerPublicKey(peerRaw);   // ora e2e.ready = true
+      e2e.peerPubRawB64 = peerRaw;          // memorizza per confronti futuri
+
       // reinvia la mia chiave, così il peer mi imposta
       if (ws && ws.readyState === 1) {
-        const myRaw = els.myPub?.value || '';
+        const myRaw = myPubExpected || (els.myPub?.value || '');
         ws.send(JSON.stringify({ type: 'key', raw: myRaw }));
       }
+
       // chiudi il <details> "Scambio chiavi"
       const details = document.querySelector('details');
       if (details) details.open = false;
