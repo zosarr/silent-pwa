@@ -119,29 +119,30 @@ window.addEventListener('DOMContentLoaded', () => {
     for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
     return bytes.buffer;
   }
-
-  // Ridimensiona/ricomprime in modo adattivo fino a stare sotto un budget di lunghezza Base64
+  // PATCH: ridimensiona/ricomprime più aggressivo per mobile (budget più basso)
   async function adaptAndEncodeImage(originalImg){
     const targets = [
-      {max:1280, q:0.85},
-      {max:960,  q:0.80},
-      {max:720,  q:0.75},
-      {max:640,  q:0.72},
+      {max: 960, q: 0.80},
+      {max: 720, q: 0.76},
+      {max: 600, q: 0.74},
+      {max: 480, q: 0.72},
+      {max: 360, q: 0.70},
     ];
-    // soglia “sicura” per molti device (~400–500 KB base64)
-    const SAFE_B64_LEN = 700_000; // ~525 KB reali (base64 ha overhead ~33%)
+    // ~300k chars base64 ≈ ~225 KB effettivi
+    const SAFE_B64_LEN = 300_000;
+
+    let lastBlob = null, lastW = null, lastH = null, lastB64 = null;
 
     for (const t of targets){
       const {blob, width, height} = await imageToJpegBlob(originalImg, {maxW:t.max, maxH:t.max, quality:t.q});
       const b64 = await blobToBase64(blob);
+      lastBlob = blob; lastW = width; lastH = height; lastB64 = b64;
       if (b64.length <= SAFE_B64_LEN){
         return { b64, width, height, blob };
       }
     }
-    // se ancora troppo grande, usa l’ultima versione (più piccola) comunque
-    const {blob, width, height} = await imageToJpegBlob(originalImg, {maxW:640, maxH:640, quality:0.7});
-    const b64 = await blobToBase64(blob);
-    return { b64, width, height, blob };
+    // se nessun target rientra nel budget, usa l'ultimo (più piccolo)
+    return { b64: lastB64, width: lastW, height: lastH, blob: lastBlob };
   }
 
   // ===== I18N & SW =====
@@ -443,13 +444,29 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!e2e.ready) return alert('Scambio chiavi incompleto: premi "Avvia sessione" o attendi la chiave del peer.');
     try{
       const img = await blobToImage(file);
-      const { b64, width, height, blob } = await adaptAndEncodeImage(img); // adattivo, no stack overflow
-      const { iv, ct } = await e2e.encrypt(b64);
-      if (ws && ws.readyState === 1){
-        ws.send(JSON.stringify({type:'image', iv, ct, mime:'image/jpeg', w:width, h:height}));
+
+      // PATCH: invio robusto con retry su cifratura
+      let { b64, width, height, blob } = await adaptAndEncodeImage(img);
+      try {
+        const { iv, ct } = await e2e.encrypt(b64);
+        if (ws && ws.readyState === 1){
+          ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:width, h:height }));
+        }
+        const url = URL.createObjectURL(blob);
+        addImage(url, 'me');
+      } catch (err) {
+        // encrypt/JSON troppo pesante → riprova molto più piccolo
+        console.warn('Encrypt fallita, ritento a 320px:', err);
+        const tiny = await imageToJpegBlob(img, { maxW: 320, maxH: 320, quality: 0.68 });
+        const tinyB64 = await blobToBase64(tiny.blob);
+        const { iv, ct } = await e2e.encrypt(tinyB64);
+        if (ws && ws.readyState === 1){
+          ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:tiny.width, h:tiny.height }));
+        }
+        const url = URL.createObjectURL(tiny.blob);
+        addImage(url, 'me');
       }
-      const url = URL.createObjectURL(blob);
-      addImage(url, 'me');
+
     }catch(err){
       console.error('Errore invio foto:', err);
       alert('Errore invio foto: ' + (err && err.message ? err.message : err));
