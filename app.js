@@ -80,18 +80,25 @@ window.addEventListener('DOMContentLoaded', () => {
       img.src = url;
     });
   }
-  function imageToJpegBlob(img, {maxW=1600, maxH=1600, quality=0.85}={}){
-    const w = img.naturalWidth, h = img.naturalHeight;
-    const ratio = Math.min(maxW/w, maxH/h, 1);
-    const nw = Math.round(w*ratio), nh = Math.round(h*ratio);
-    const canvas = document.createElement('canvas');
-    canvas.width = nw; canvas.height = nh;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, nw, nh);
-    return new Promise((resolve)=>{
-      canvas.toBlob((b)=> resolve({blob:b, width:nw, height:nh}), 'image/jpeg', quality);
-    });
-  }
+  function imageToJpegBlob(img, {maxW=1280, maxH=1280, quality=0.85}={}){
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const r = Math.min(maxW/w, maxH/h, 1);
+  const nw = Math.round(w*r), nh = Math.round(h*r);
+  const canvas = document.createElement('canvas');
+  canvas.width = nw; canvas.height = nh;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, nw, nh);
+  return new Promise((resolve)=>{
+    if (canvas.toBlob){
+      canvas.toBlob(b => resolve({ blob: b, width: nw, height: nh }), 'image/jpeg', quality);
+    } else {
+      // fallback per browser senza toBlob
+      const dataURL = canvas.toDataURL('image/jpeg', quality);
+      fetch(dataURL).then(r => r.blob()).then(b => resolve({ blob: b, width: nw, height: nh }));
+    }
+  });
+}
+
 
   // ===== I18N & SW =====
   els.langSel && els.langSel.addEventListener('change', () => applyLang(els.langSel.value));
@@ -400,6 +407,20 @@ function b64ToAb(b64){
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes.buffer;
 }
+// Converte un Blob in Base64 in modo sicuro (niente stack overflow)
+function blobToBase64(blob){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result || '';
+      const b64 = String(dataUrl).split(',')[1] || ''; // rimuove "data:...;base64,"
+      resolve(b64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 
 
   async function handleFile(file){
@@ -408,16 +429,15 @@ function b64ToAb(b64){
     if (!e2e.ready) return alert('Scambio chiavi incompleto: premi "Avvia sessione" o attendi la chiave del peer.');
     try{
       const img = await blobToImage(file);
-      const {blob, width, height} = await imageToJpegBlob(img, {maxW:1600, maxH:1600, quality:0.85});
-      const buf = await blob.arrayBuffer();
-const b64 = abToB64(buf);
+const {blob, width, height} = await imageToJpegBlob(img, {maxW:1280, maxH:1280, quality:0.85}); // un filo più piccolo aiuta i device
+const b64 = await blobToBase64(blob);                       // <-- NO stack overflow
 const { iv, ct } = await e2e.encrypt(b64);
 if (ws && ws.readyState === 1){
   ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:width, h:height }));
 }
+const url = URL.createObjectURL(blob);
+addImage(url, 'me');
 
-      const url = URL.createObjectURL(blob);
-      addImage(url, 'me');
     }catch(err){
       console.error('Errore invio foto:', err);
       alert('Errore invio foto: ' + (err && err.message ? err.message : err));
