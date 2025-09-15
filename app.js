@@ -3,13 +3,14 @@ import {STRINGS, applyLang} from './i18n.js';
 
 window.addEventListener('DOMContentLoaded', () => {
   // ===== CONFIG =====
-  const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
+  const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test'; // puoi anche ometterlo: vedasi fallback dinamico
 
   let ws = null;
   let e2e = new E2E();
   let isConnecting = false;
   let isConnected = false;
   let reconnectTimer = null;
+  let backoffMs = 2000;
 
   let mediaStream = null;
   let mediaRecorder = null;
@@ -38,12 +39,38 @@ window.addEventListener('DOMContentLoaded', () => {
     connTitle: $('[data-i18n="connection"]')
   };
 
+  // ===== BANNER ERRORE A SCHERMO =====
+  let errBar = $('#wsErrorBar');
+  if (!errBar) {
+    errBar = document.createElement('div');
+    errBar.id = 'wsErrorBar';
+    errBar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;padding:8px 12px;background:#dc2626;color:#fff;font-weight:700;display:none;text-align:center;';
+    document.body.appendChild(errBar);
+  }
+  function showError(msg) {
+    console.error('[WS]', msg);
+    errBar.textContent = msg;
+    errBar.style.display = '';
+  }
+  function hideError() {
+    errBar.style.display = 'none';
+  }
+
   const qs = new URLSearchParams(location.search);
-  const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
 
   // ===== UTIL =====
   function escapeHtml(s){
     return s ? s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])) : '';
+  }
+  function pickWsUrl(){
+    // 1) priorità all’override via ?ws=
+    const fromQs = qs.get('ws');
+    if (fromQs && /^wss?:\/\//i.test(fromQs)) return fromQs;
+    // 2) AUTO_WS_URL se valido
+    if (AUTO_WS_URL && /^wss?:\/\//i.test(AUTO_WS_URL)) return AUTO_WS_URL;
+    // 3) fallback dinamico: stesso host dell’app
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${proto}://${location.host}/ws?room=test`;
   }
 
   // ===== I18N & SW =====
@@ -55,6 +82,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===== WS URL input & Connect button =====
+  const FORCED_WS = pickWsUrl();
   if (els.wsUrl) { els.wsUrl.value = FORCED_WS; els.wsUrl.style.display = 'none'; }
   if (els.connectBtn) els.connectBtn.style.display = 'none';
 
@@ -99,7 +127,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     window.addEventListener('beforeinstallprompt', (e)=>{
       e.preventDefault();
-      deferredPrompt = e; // terremo il prompt per click utente
+      deferredPrompt = e; // prompt tenuto per il click utente
     });
     btn.addEventListener('click', async ()=>{
       if (deferredPrompt){
@@ -196,22 +224,43 @@ window.addEventListener('DOMContentLoaded', () => {
     const url = (els.wsUrl && els.wsUrl.value) || FORCED_WS;
     isConnecting = true;
     setConnState(false);
+    hideError();
+
+    console.log('[WS] connecting to:', url);
     try{
       ws = new WebSocket(url);
     }catch(e){
       isConnecting = false;
+      showError('Errore iniziale WebSocket: ' + (e && e.message ? e.message : e));
       scheduleReconnect();
       return;
     }
+
     ws.addEventListener('open', ()=>{
+      console.log('[WS] open');
       isConnecting = false;
+      isConnected = true;
+      backoffMs = 2000;
       setConnState(true);
+      hideError();
     });
-    ws.addEventListener('close', ()=>{
+
+    ws.addEventListener('close', (ev)=>{
+      console.warn('[WS] close', ev.code, ev.reason);
       isConnecting = false;
+      isConnected = false;
       setConnState(false);
+      const reason = humanCloseReason(ev);
+      showError(`Connessione chiusa (${ev.code})${reason ? ': ' + reason : ''}`);
       scheduleReconnect();
     });
+
+    ws.addEventListener('error', (ev)=>{
+      console.error('[WS] error', ev);
+      // alcuni browser danno solo "errore generico"
+      showError('Errore WebSocket generico (controlla URL/SSL/Firewall)');
+    });
+
     ws.addEventListener('message', async (ev)=>{
       try{
         const msg = JSON.parse(ev.data);
@@ -243,13 +292,38 @@ window.addEventListener('DOMContentLoaded', () => {
           addImageMsg(url, 'peer');
           return;
         }
-      }catch(e){ /* ignore */ }
+      }catch(e){
+        console.error('[WS] message error', e);
+      }
     });
   }
+
+  function humanCloseReason(ev){
+    // messaggi più chiari
+    if (location.protocol === 'https:' && ((els.wsUrl && els.wsUrl.value.startsWith('ws://')))) {
+      return 'Mixed Content: la pagina è HTTPS ma il WS è ws:// (usa wss://)';
+    }
+    if (ev.code === 1006) return 'Handshake fallito / TLS / server irraggiungibile';
+    if (ev.code === 1000) return 'Chiusura normale';
+    if (ev.code === 1001) return 'Server riavviato o pagina cambiata';
+    return ev.reason || '';
+  }
+
   function scheduleReconnect(){
     if (reconnectTimer) return;
-    reconnectTimer = setTimeout(()=>{ reconnectTimer=null; connect(); }, 2000);
+    backoffMs = Math.min(backoffMs * 2, 15000);
+    console.log('[WS] retry in', backoffMs, 'ms');
+    reconnectTimer = setTimeout(()=>{ reconnectTimer=null; connect(); }, backoffMs);
   }
+
+  // keep-alive ping (alcuni hosting chiudono se inattivo)
+  setInterval(()=>{
+    try{
+      if (ws && ws.readyState === 1){
+        ws.send(JSON.stringify({ type:'ping', t: Date.now() }));
+      }
+    }catch(_){}
+  }, 25000);
 
   (async function autoStart(){
     await ensureKeys();
@@ -301,6 +375,7 @@ window.addEventListener('DOMContentLoaded', () => {
     catch(err){ alert('Microfono non disponibile: ' + err.message); throw err; }
   }
 
+  // Pulsanti media (se mancano li creo accanto al tasto Invia)
   function ensureMediaButtons(){
     const row = (els.sendBtn && els.sendBtn.parentElement) || (els.input && els.input.parentElement) || document.body;
     if (!$('#recBtn')){
@@ -368,11 +443,11 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Crea i pulsanti se mancavano e collega handler
   ensureMediaButtons();
+
+  // (re)wire audio
   els.stopRecBtn = $('#stopRecBtn');
   els.recBtn = $('#recBtn');
-
   if (els.recBtn && els.stopRecBtn){
     els.stopRecBtn.disabled = true;
     els.recBtn.addEventListener('click', async ()=>{
@@ -414,5 +489,4 @@ window.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('visibilitychange', ()=>{
     if (document.visibilityState === 'visible' && (!ws || ws.readyState !== 1)) connect();
   });
-
 });
