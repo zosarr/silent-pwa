@@ -6,6 +6,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
   const qs = new URLSearchParams(location.search);
   const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
+  document.getElementById('wsEndpoint')?.textContent = FORCED_WS;
 
   // ===== Stato =====
   let ws = null;
@@ -55,24 +56,65 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!els.log) return;
     const li = document.createElement('li');
     li.className = who;
-    li.innerHTML = escapeHtml(text);
+    const div = document.createElement('div');
+    div.className = 'bubble';
+    if (who === 'me') div.classList.add('me');
+    div.innerHTML = escapeHtml(text);
+    li.appendChild(div);
     els.log.appendChild(li);
     els.log.scrollTop = els.log.scrollHeight;
     setTimeout(() => li.remove(), 5 * 60 * 1000); // autodistruzione dopo 5 min
   }
+
   function addImage(url, who='peer'){
     if (!els.log) return;
     const li = document.createElement('li');
     li.className = who;
+    const div = document.createElement('div');
+    div.className = 'bubble';
+    if (who === 'me') div.classList.add('me');
     const img = document.createElement('img');
     img.src = url;
     img.alt = 'foto';
     img.style.maxWidth = '70%';
     img.style.borderRadius = '8px';
-    li.appendChild(img);
+    div.appendChild(img);
+    li.appendChild(div);
     els.log.appendChild(li);
     els.log.scrollTop = els.log.scrollHeight;
     setTimeout(()=>{ URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
+  }
+
+  // nuovo: aggiunge audio alla UI
+  function addAudio(blobOrUrl, who='peer', durationSec=null) {
+    if (!els.log) return;
+    const li = document.createElement('li');
+    li.className = who;
+    const div = document.createElement('div');
+    div.className = 'bubble';
+    if (who === 'me') div.classList.add('me');
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    let url;
+    if (typeof blobOrUrl === 'string') {
+      url = blobOrUrl;
+      audio.src = url;
+    } else {
+      url = URL.createObjectURL(blobOrUrl);
+      audio.src = url;
+      // revoca dopo 5 minuti quando rimuoviamo il li
+    }
+    div.appendChild(audio);
+    if (durationSec !== null) {
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `${durationSec}s` + (who === 'me' ? ' • Inviato' : '');
+      div.appendChild(meta);
+    }
+    li.appendChild(div);
+    els.log.appendChild(li);
+    els.log.scrollTop = els.log.scrollHeight;
+    setTimeout(()=>{ if (url && url.startsWith('blob:')) URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
   }
 
   // === Helper immagine / Base64 (robusti su smartphone) ===
@@ -97,7 +139,6 @@ window.addEventListener('DOMContentLoaded', () => {
       if (canvas.toBlob){
         canvas.toBlob(b => resolve({ blob: b, width: nw, height: nh }), 'image/jpeg', quality);
       } else {
-        // fallback per browser senza toBlob
         const dataURL = canvas.toDataURL('image/jpeg', quality);
         fetch(dataURL).then(r => r.blob()).then(b => resolve({ blob: b, width: nw, height: nh }));
       }
@@ -132,7 +173,6 @@ window.addEventListener('DOMContentLoaded', () => {
       {max: 480, q: 0.72},
       {max: 360, q: 0.70},
     ];
-    // ~300k chars base64 ≈ ~225 KB reali
     const SAFE_B64_LEN = 300_000;
 
     let lastBlob = null, lastW = null, lastH = null, lastB64 = null;
@@ -145,7 +185,6 @@ window.addEventListener('DOMContentLoaded', () => {
         return { b64, width, height, blob };
       }
     }
-    // se nessun target rientra nel budget, usa l'ultimo (più piccolo)
     return { b64: lastB64, width: lastW, height: lastH, blob: lastBlob };
   }
 
@@ -166,8 +205,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (els.connTitle) {
       els.connTitle.textContent = `: ${txt}`;
       els.connTitle.style.color = color;
-     els.connTitle.style.fontWeight = '700';
-   }
+      els.connTitle.style.fontWeight = '700';
+    }
     if (els.connStatus) {
       els.connStatus.textContent = connected ? 'Connesso' : 'Non connesso';
       els.connStatus.classList.toggle('connected', connected);
@@ -202,7 +241,6 @@ window.addEventListener('DOMContentLoaded', () => {
       const pub = await e2e.init(); // genera una sola volta
       myPubExpected = pub;
       if (els.myPub) els.myPub.value = pub;
-      // “blinda” il campo UI: non deve cambiare
       if (els.myPub) {
         els.myPub.readOnly = true;
         els.myPub.addEventListener('input', ()=>{
@@ -289,9 +327,10 @@ window.addEventListener('DOMContentLoaded', () => {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'ping') return;
 
-        if (msg.type === 'key') {
+        if (msg.type === 'key' || msg.type === 'pubkey') {
+          // supporta entrambi i nomi: 'key' o 'pubkey'
           await ensureKeys();
-          const peerRaw = (msg.raw || '').trim();
+          const peerRaw = (msg.raw || msg.pub || '').trim();
           const myRaw   = (myPubExpected || els.myPub?.value || '').trim();
 
           // Se il server ributta la TUA chiave, ignorala
@@ -338,6 +377,20 @@ window.addEventListener('DOMContentLoaded', () => {
           addImage(url, 'peer');
           return;
         }
+
+        if (msg.type === 'audio') {
+          // audio cifrato in base64 -> decrittazione -> riproduzione
+          try {
+            const b64 = await e2e.decrypt(msg.iv, msg.ct); // base64 string of audio
+            const ab = b64ToAb(b64);
+            const blob = new Blob([ab], { type: msg.mime || 'audio/webm' });
+            addAudio(blob, 'peer', msg.duration || null);
+          } catch (err) {
+            console.error('Errore decrypt audio:', err);
+          }
+          return;
+        }
+
       } catch (e) {
         console.error('[WS] message error:', e);
       }
@@ -353,18 +406,15 @@ window.addEventListener('DOMContentLoaded', () => {
   (async function autoStart() {
     await ensureKeys();
     connect();
-    // crea i controlli foto (accanto a "Invia") solo a pagina pronta
-    ensurePhotoControls();
+    ensureComposerControls();
   })();
 
   // ===== Avvia Sessione =====
   els.startBtn && els.startBtn.addEventListener('click', async (e) => {
     e.preventDefault();
     await ensureKeys(); // NON rigenera più
-    // l'utente ora ha esplicitamente richiesto di avviare la sessione
     sessionStarted = true;
 
-    // preferisci la chiave incollata dall'utente, altrimenti usa quella pending
     let peerRaw = (els.peerPub?.value || '').trim();
     if (!peerRaw && pendingPeerKey) peerRaw = pendingPeerKey;
 
@@ -383,7 +433,6 @@ window.addEventListener('DOMContentLoaded', () => {
         try { ws.send(JSON.stringify({ type: 'key', raw: myRaw })); } catch {}
       }
 
-      // chiudi il <details> "Scambio chiavi"
       const details = document.querySelector('details');
       if (details) details.open = false;
 
@@ -426,72 +475,212 @@ window.addEventListener('DOMContentLoaded', () => {
     if (els.log) els.log.innerHTML = '';
   });
 
-  // ===== Foto: scatta o scegli dalla galleria (senza cambiare HTML) =====
-  function ensurePhotoControls(){
-    if (!els.composer || document.getElementById('photoBtn')) return;
-    const photoBtn = document.createElement('button');
-    photoBtn.id = 'photoBtn';
-    photoBtn.textContent = 'Foto';
-    photoBtn.title = 'Scatta o scegli dalla galleria';
-    photoBtn.style.marginLeft = '6px';
-    els.composer.appendChild(photoBtn);
+  // ===== Foto & Audio controls: crea i pulsanti accanto al composer =====
+  function ensureComposerControls(){
+    if (!els.composer) return;
 
-    // due input invisibili: camera & galleria
-    const cameraInput  = document.createElement('input');
-    cameraInput.type = 'file';
-    cameraInput.accept = 'image/*';
-    cameraInput.capture = 'environment';
-    cameraInput.style.display = 'none';
+    // Photo button (come prima)
+    if (!document.getElementById('photoBtn')) {
+      const photoBtn = document.createElement('button');
+      photoBtn.id = 'photoBtn';
+      photoBtn.textContent = 'Foto';
+      photoBtn.title = 'Scatta o scegli dalla galleria';
+      photoBtn.style.marginLeft = '6px';
+      els.composer.appendChild(photoBtn);
 
-    const galleryInput = document.createElement('input');
-    galleryInput.type = 'file';
-    galleryInput.accept = 'image/*';
-    galleryInput.style.display = 'none';
+      // two inputs for camera & gallery
+      const cameraInput  = document.createElement('input');
+      cameraInput.type = 'file';
+      cameraInput.accept = 'image/*';
+      cameraInput.capture = 'environment';
+      cameraInput.style.display = 'none';
 
-    document.body.appendChild(cameraInput);
-    document.body.appendChild(galleryInput);
+      const galleryInput = document.createElement('input');
+      galleryInput.type = 'file';
+      galleryInput.accept = 'image/*';
+      galleryInput.style.display = 'none';
 
-     // --- Mini-menu Scatta / Galleria ---
-els.composer.style.position = 'relative'; // per posizionare il menu
+      document.body.appendChild(cameraInput);
+      document.body.appendChild(galleryInput);
 
-const menu = document.createElement('div');
-menu.className = 'photo-menu hidden';
-menu.innerHTML = `
-  <button type="button" data-act="camera">Scatta</button>
-  <button type="button" data-act="gallery">Galleria</button>
-`;
-els.composer.appendChild(menu);
+      // menu
+      els.composer.style.position = 'relative';
+      const menu = document.createElement('div');
+      menu.className = 'photo-menu hidden';
+      menu.style.position = 'absolute';
+      menu.style.zIndex = '60';
+      menu.style.padding = '8px';
+      menu.style.background = '#fff';
+      menu.style.border = '1px solid #e5e7eb';
+      menu.style.borderRadius = '8px';
+      menu.style.display = 'none';
+      menu.innerHTML = `
+        <button type="button" data-act="camera">Scatta</button>
+        <button type="button" data-act="gallery">Galleria</button>
+      `;
+      els.composer.appendChild(menu);
 
-photoBtn.addEventListener('click', (e)=>{
-  e.preventDefault();
+      photoBtn.addEventListener('click', (e)=>{
+        e.preventDefault();
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        menu.style.left = '-10px';
+        menu.style.top = '-80px';
+      });
 
-  // mostra il menu centrato
-menu.classList.remove('hidden');
-menu.style.left = '50%';
-menu.style.top = '50%';
-menu.style.transform = 'translate(-50%, -50%)';
+      menu.addEventListener('click', (e)=>{
+        const act = e.target?.getAttribute('data-act');
+        if (act === 'camera') cameraInput.click();
+        if (act === 'gallery') galleryInput.click();
+        menu.style.display = 'none';
+      });
 
- 
-});
+      document.addEventListener('click', (e)=>{
+        if (!menu.contains(e.target) && e.target !== photoBtn) {
+          menu.style.display = 'none';
+        }
+      });
 
-// azioni menu
-menu.addEventListener('click', (e)=>{
-  const act = e.target?.getAttribute('data-act');
-  if (act === 'camera') cameraInput.click();
-  if (act === 'gallery') galleryInput.click();
-  menu.classList.add('hidden');
-});
+      cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
+      galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
+    }
 
-// chiudi se clicchi fuori
-document.addEventListener('click', (e)=>{
-  if (!menu.contains(e.target) && e.target !== photoBtn) {
-    menu.classList.add('hidden');
-  }
-});
+    // ===== Audio recorder buttons (limite 30s) =====
+    if (!document.getElementById('recordBtn')) {
+      const audioControls = document.createElement('div');
+      audioControls.id = 'audio-controls';
+      audioControls.style.marginLeft = '6px';
+      audioControls.innerHTML = `
+        <button id="recordBtn">🎙️ Registra</button>
+        <button id="stopBtn" disabled>■ Ferma</button>
+        <span id="recStatus">Pronto</span>
+      `;
+      els.composer.appendChild(audioControls);
 
-    
-    cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
-    galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
+      const recordBtn = document.getElementById('recordBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const recStatus = document.getElementById('recStatus');
+
+      // --------------- configurazione durata massima ---------------
+      const MAX_RECORD_SEC = 30; // limite in secondi
+      let mediaRecorder = null;
+      let recChunks = [];
+      let recStartTs = 0;
+      let currentStream = null;
+      let maxTimer = null;
+      let tickTimer = null;
+
+      // processa la registrazione (condivide logica di invio)
+      async function processRecording(blob, durationSec) {
+        // anteprima locale
+        try { addAudio(blob, 'me', durationSec); } catch(e){ console.warn(e); }
+
+        // invio automatico
+        try {
+          if (!isConnected) {
+            recStatus.textContent = 'Non connesso';
+            return;
+          }
+          if (!e2e.ready) {
+            recStatus.textContent = 'E2E non pronta';
+            alert('Scambio chiavi incompleto: premi "Avvia sessione" o attendi la chiave del peer.');
+            return;
+          }
+
+          const b64 = await blobToBase64(blob); // usa la funzione esistente
+          const { iv, ct } = await e2e.encrypt(b64);
+          const payload = { type: 'audio', iv, ct, mime: blob.type, duration: durationSec, size: blob.size };
+          if (ws && ws.readyState === 1) {
+            ws.send(JSON.stringify(payload));
+            recStatus.textContent = 'Inviato';
+          } else {
+            recStatus.textContent = 'Non connesso';
+            console.warn('WebSocket non connesso: impossibile inviare audio');
+          }
+        } catch (err) {
+          console.error('Errore invio audio:', err);
+          recStatus.textContent = 'Errore invio';
+        } finally {
+          // pulizia stream se ancora attivo
+          if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+          recordBtn.disabled = false;
+          stopBtn.disabled = true;
+        }
+      }
+
+      // avvia registrazione (gestisce timer di stop automatico e conto alla rovescia)
+      recordBtn.addEventListener('click', async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          currentStream = stream;
+          recChunks = [];
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+
+          mediaRecorder.onstop = async () => {
+            // crea blob dai chunk e chiama processRecording
+            const blob = new Blob(recChunks, { type: recChunks[0]?.type || 'audio/webm' });
+            const durationSec = Math.round((Date.now() - recStartTs) / 1000);
+            // cancella timers
+            if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
+            if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+            await processRecording(blob, durationSec);
+          };
+
+          // start
+          mediaRecorder.start();
+          recStartTs = Date.now();
+          recStatus.textContent = `Registrazione — ${MAX_RECORD_SEC}s rimanenti`;
+          recordBtn.disabled = true;
+          stopBtn.disabled = false;
+
+          // auto-stop dopo MAX_RECORD_SEC
+          maxTimer = setTimeout(() => {
+            // se ancora registriamo, fermiamo
+            try { if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop(); } catch(e){ console.warn(e); }
+          }, MAX_RECORD_SEC * 1000);
+
+          // tick per aggiornare display (250ms per reattività)
+          tickTimer = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - recStartTs) / 1000);
+            const remaining = Math.max(0, MAX_RECORD_SEC - elapsed);
+            recStatus.textContent = `Registrazione — ${remaining}s rimanenti`;
+            if (remaining <= 0) {
+              // safety: pulizia tick (onstop handler farà il resto)
+              if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+            }
+          }, 250);
+        } catch (err) {
+          console.error('Permesso microfono negato o errore:', err);
+          recStatus.textContent = 'Errore accesso microfono';
+        }
+      });
+
+      // stop manuale: ferma mediaRecorder (l'onstop si occupa di invio)
+      stopBtn.addEventListener('click', async () => {
+        if (!mediaRecorder) return;
+        try {
+          // cancella timer di auto-stop
+          if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
+          if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+          if (mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+          } else {
+            // se non in stato 'recording' ma abbiamo chunk, processali comunque
+            const blob = new Blob(recChunks, { type: recChunks[0]?.type || 'audio/webm' });
+            const durationSec = Math.round((Date.now() - recStartTs) / 1000);
+            await processRecording(blob, durationSec);
+          }
+        } catch (e) {
+          console.warn('MediaRecorder stop error', e);
+          // cleanup forzato
+          if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+          recordBtn.disabled = false;
+          stopBtn.disabled = true;
+          recStatus.textContent = 'Pronto';
+        }
+      });
+    }
+    // ===== fine Audio recorder buttons =====
   }
 
   async function handleFile(file){
@@ -500,8 +689,6 @@ document.addEventListener('click', (e)=>{
     if (!e2e.ready) return alert('Scambio chiavi incompleto: premi "Avvia sessione" o attendi la chiave del peer.');
     try{
       const img = await blobToImage(file);
-
-      // invio robusto con retry su cifratura
       let { b64, width, height, blob } = await adaptAndEncodeImage(img);
       try {
         const { iv, ct } = await e2e.encrypt(b64);
@@ -511,7 +698,6 @@ document.addEventListener('click', (e)=>{
         const url = URL.createObjectURL(blob);
         addImage(url, 'me');
       } catch (err) {
-        // encrypt/JSON troppo pesante → riprova molto più piccolo
         console.warn('Encrypt fallita, ritento a 320px:', err);
         const tiny = await imageToJpegBlob(img, { maxW: 320, maxH: 320, quality: 0.68 });
         const tinyB64 = await blobToBase64(tiny.blob);
@@ -534,79 +720,3 @@ document.addEventListener('click', (e)=>{
     if (document.visibilityState === 'visible' && (!ws || ws.readyState !== 1)) connect();
   });
 });
-// ======== Inizio: registratore audio (da aggiungere in app.js) ========
-mediaRecorder.stop();
-} catch (e) {
-console.warn('MediaRecorder.stop() errore:', e);
-// comunque prova a pulire
-if (currentStream) { currentStream.getTracks().forEach(t=>t.stop()); currentStream=null; }
-recordBtn.disabled = false; stopBtn.disabled = true; resolve();
-}
-});
-}
-
-
-// helper per inserire audio nella UI locale subito
-function addAudioMessageLocal(blob, durationSec) {
-const url = URL.createObjectURL(blob);
-// implementa come preferisci nella UI; qui un esempio generico che aggiunge un elemento audio
-const container = document.createElement('div');
-container.className = 'msg audio me';
-container.innerHTML = `
-<div class="bubble">
-<audio controls src="${url}"></audio>
-<div class="meta">${durationSec}s • Inviato</div>
-</div>
-`;
-const messagesEl = document.getElementById('messages') || document.body;
-messagesEl.appendChild(container);
-// scroll verso il basso se necessario
-messagesEl.scrollTop = messagesEl.scrollHeight;
-}
-
-
-// handler per messaggi audio in arrivo
-async function handleIncomingAudio(msg) {
-try {
-if (!msg.iv || !msg.ct) throw new Error('Formato messaggio audio non valido');
-const b64 = await e2e.decrypt(msg.iv, msg.ct);
-const blob = base64ToBlob(b64, msg.mime || 'audio/webm');
-const url = URL.createObjectURL(blob);
-
-
-// crea elemento nella UI per il peer
-const container = document.createElement('div');
-container.className = 'msg audio peer';
-container.innerHTML = `
-<div class="bubble">
-<audio controls src="${url}"></audio>
-<div class="meta">${msg.duration || ''}s</div>
-</div>
-`;
-const messagesEl = document.getElementById('messages') || document.body;
-messagesEl.appendChild(container);
-messagesEl.scrollTop = messagesEl.scrollHeight;
-} catch (err) {
-console.error('Errore decrittazione/gestione audio:', err);
-}
-}
-
-
-// ======== Fine: registratore audio ========
-
-
-// ======== Wiring UI: associa eventi ai pulsanti ========
-if (recordBtn && stopBtn) {
-recordBtn.addEventListener('click', async (e) => {
-await startRecording();
-});
-stopBtn.addEventListener('click', async (e) => {
-await stopAndSendRecording();
-});
-}
-
-
-// ======== Hook per integrazione con il dispatcher WebSocket ========
-// Inserisci/associa questa chiamata dentro il punto dove vengono gestiti i messaggi ws.onmessage:
-// if (msg.type === 'audio') handleIncomingAudio(msg);
-// (Se il progetto ha un dispatcher centralizzato, aggiungi verificare 'audio' lì.)
