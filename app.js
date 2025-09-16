@@ -6,7 +6,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
   const qs = new URLSearchParams(location.search);
   const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
-  document.getElementById('wsEndpoint')?.textContent = FORCED_WS;
 
   // ===== Stato =====
   let ws = null;
@@ -406,15 +405,18 @@ window.addEventListener('DOMContentLoaded', () => {
   (async function autoStart() {
     await ensureKeys();
     connect();
-    ensureComposerControls();
+    // crea i controlli foto (accanto a "Invia") solo a pagina pronta
+    ensurePhotoControls();
   })();
 
   // ===== Avvia Sessione =====
   els.startBtn && els.startBtn.addEventListener('click', async (e) => {
     e.preventDefault();
     await ensureKeys(); // NON rigenera più
+    // l'utente ora ha esplicitamente richiesto di avviare la sessione
     sessionStarted = true;
 
+    // preferisci la chiave incollata dall'utente, altrimenti usa quella pending
     let peerRaw = (els.peerPub?.value || '').trim();
     if (!peerRaw && pendingPeerKey) peerRaw = pendingPeerKey;
 
@@ -433,6 +435,7 @@ window.addEventListener('DOMContentLoaded', () => {
         try { ws.send(JSON.stringify({ type: 'key', raw: myRaw })); } catch {}
       }
 
+      // chiudi il <details> "Scambio chiavi"
       const details = document.querySelector('details');
       if (details) details.open = false;
 
@@ -475,248 +478,73 @@ window.addEventListener('DOMContentLoaded', () => {
     if (els.log) els.log.innerHTML = '';
   });
 
-  // ===== Foto & Audio controls: crea i pulsanti accanto al composer =====
-  function ensureComposerControls(){
-    if (!els.composer) return;
+  // ===== Foto: scatta o scegli dalla galleria (senza cambiare HTML) =====
+  function ensurePhotoControls(){
+    if (!els.composer || document.getElementById('photoBtn')) return;
+    const photoBtn = document.createElement('button');
+    photoBtn.id = 'photoBtn';
+    photoBtn.textContent = 'Foto';
+    photoBtn.title = 'Scatta o scegli dalla galleria';
+    photoBtn.style.marginLeft = '6px';
+    els.composer.appendChild(photoBtn);
 
-    // Photo button (come prima)
-    if (!document.getElementById('photoBtn')) {
-      const photoBtn = document.createElement('button');
-      photoBtn.id = 'photoBtn';
-      photoBtn.textContent = 'Foto';
-      photoBtn.title = 'Scatta o scegli dalla galleria';
-      photoBtn.style.marginLeft = '6px';
-      els.composer.appendChild(photoBtn);
+    // due input invisibili: camera & galleria
+    const cameraInput  = document.createElement('input');
+    cameraInput.type = 'file';
+    cameraInput.accept = 'image/*';
+    cameraInput.capture = 'environment';
+    cameraInput.style.display = 'none';
 
-      // two inputs for camera & gallery
-      const cameraInput  = document.createElement('input');
-      cameraInput.type = 'file';
-      cameraInput.accept = 'image/*';
-      cameraInput.capture = 'environment';
-      cameraInput.style.display = 'none';
+    const galleryInput = document.createElement('input');
+    galleryInput.type = 'file';
+    galleryInput.accept = 'image/*';
+    galleryInput.style.display = 'none';
 
-      const galleryInput = document.createElement('input');
-      galleryInput.type = 'file';
-      galleryInput.accept = 'image/*';
-      galleryInput.style.display = 'none';
+    document.body.appendChild(cameraInput);
+    document.body.appendChild(galleryInput);
 
-      document.body.appendChild(cameraInput);
-      document.body.appendChild(galleryInput);
+     // --- Mini-menu Scatta / Galleria ---
+els.composer.style.position = 'relative'; // per posizionare il menu
 
-      // menu
-      els.composer.style.position = 'relative';
-      const menu = document.createElement('div');
-      menu.className = 'photo-menu hidden';
-      menu.style.position = 'absolute';
-      menu.style.zIndex = '60';
-      menu.style.padding = '8px';
-      menu.style.background = '#fff';
-      menu.style.border = '1px solid #e5e7eb';
-      menu.style.borderRadius = '8px';
-      menu.style.display = 'none';
-      menu.innerHTML = `
-        <button type="button" data-act="camera">Scatta</button>
-        <button type="button" data-act="gallery">Galleria</button>
-      `;
-      els.composer.appendChild(menu);
+const menu = document.createElement('div');
+menu.className = 'photo-menu hidden';
+menu.innerHTML = `
+  <button type="button" data-act="camera">Scatta</button>
+  <button type="button" data-act="gallery">Galleria</button>
+`;
+els.composer.appendChild(menu);
 
-      photoBtn.addEventListener('click', (e)=>{
-        e.preventDefault();
-        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-        menu.style.left = '-10px';
-        menu.style.top = '-80px';
-      });
+photoBtn.addEventListener('click', (e)=>{
+  e.preventDefault();
 
-      menu.addEventListener('click', (e)=>{
-        const act = e.target?.getAttribute('data-act');
-        if (act === 'camera') cameraInput.click();
-        if (act === 'gallery') galleryInput.click();
-        menu.style.display = 'none';
-      });
+  // mostra il menu centrato
+menu.classList.remove('hidden');
+menu.style.left = '50%';
+menu.style.top = '50%';
+menu.style.transform = 'translate(-50%, -50%)';
 
-      document.addEventListener('click', (e)=>{
-        if (!menu.contains(e.target) && e.target !== photoBtn) {
-          menu.style.display = 'none';
-        }
-      });
+ 
+});
 
-      cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
-      galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
-    }
+// azioni menu
+menu.addEventListener('click', (e)=>{
+  const act = e.target?.getAttribute('data-act');
+  if (act === 'camera') cameraInput.click();
+  if (act === 'gallery') galleryInput.click();
+  menu.classList.add('hidden');
+});
 
-    // ===== Audio recorder buttons (limite 30s) =====
+// chiudi se clicchi fuori
+document.addEventListener('click', (e)=>{
+  if (!menu.contains(e.target) && e.target !== photoBtn) {
+    menu.classList.add('hidden');
+  }
+});
+
+    
+    cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
+    galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
+    // ===== Audio recorder buttons (max 30s) =====
     if (!document.getElementById('recordBtn')) {
       const audioControls = document.createElement('div');
       audioControls.id = 'audio-controls';
-      audioControls.style.marginLeft = '6px';
-      audioControls.innerHTML = `
-        <button id="recordBtn">🎙️ Registra</button>
-        <button id="stopBtn" disabled>■ Ferma</button>
-        <span id="recStatus">Pronto</span>
-      `;
-      els.composer.appendChild(audioControls);
-
-      const recordBtn = document.getElementById('recordBtn');
-      const stopBtn = document.getElementById('stopBtn');
-      const recStatus = document.getElementById('recStatus');
-
-      // --------------- configurazione durata massima ---------------
-      const MAX_RECORD_SEC = 30; // limite in secondi
-      let mediaRecorder = null;
-      let recChunks = [];
-      let recStartTs = 0;
-      let currentStream = null;
-      let maxTimer = null;
-      let tickTimer = null;
-
-      // processa la registrazione (condivide logica di invio)
-      async function processRecording(blob, durationSec) {
-        // anteprima locale
-        try { addAudio(blob, 'me', durationSec); } catch(e){ console.warn(e); }
-
-        // invio automatico
-        try {
-          if (!isConnected) {
-            recStatus.textContent = 'Non connesso';
-            return;
-          }
-          if (!e2e.ready) {
-            recStatus.textContent = 'E2E non pronta';
-            alert('Scambio chiavi incompleto: premi "Avvia sessione" o attendi la chiave del peer.');
-            return;
-          }
-
-          const b64 = await blobToBase64(blob); // usa la funzione esistente
-          const { iv, ct } = await e2e.encrypt(b64);
-          const payload = { type: 'audio', iv, ct, mime: blob.type, duration: durationSec, size: blob.size };
-          if (ws && ws.readyState === 1) {
-            ws.send(JSON.stringify(payload));
-            recStatus.textContent = 'Inviato';
-          } else {
-            recStatus.textContent = 'Non connesso';
-            console.warn('WebSocket non connesso: impossibile inviare audio');
-          }
-        } catch (err) {
-          console.error('Errore invio audio:', err);
-          recStatus.textContent = 'Errore invio';
-        } finally {
-          // pulizia stream se ancora attivo
-          if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
-          recordBtn.disabled = false;
-          stopBtn.disabled = true;
-        }
-      }
-
-      // avvia registrazione (gestisce timer di stop automatico e conto alla rovescia)
-      recordBtn.addEventListener('click', async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          currentStream = stream;
-          recChunks = [];
-          mediaRecorder = new MediaRecorder(stream);
-          mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
-
-          mediaRecorder.onstop = async () => {
-            // crea blob dai chunk e chiama processRecording
-            const blob = new Blob(recChunks, { type: recChunks[0]?.type || 'audio/webm' });
-            const durationSec = Math.round((Date.now() - recStartTs) / 1000);
-            // cancella timers
-            if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
-            if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
-            await processRecording(blob, durationSec);
-          };
-
-          // start
-          mediaRecorder.start();
-          recStartTs = Date.now();
-          recStatus.textContent = `Registrazione — ${MAX_RECORD_SEC}s rimanenti`;
-          recordBtn.disabled = true;
-          stopBtn.disabled = false;
-
-          // auto-stop dopo MAX_RECORD_SEC
-          maxTimer = setTimeout(() => {
-            // se ancora registriamo, fermiamo
-            try { if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop(); } catch(e){ console.warn(e); }
-          }, MAX_RECORD_SEC * 1000);
-
-          // tick per aggiornare display (250ms per reattività)
-          tickTimer = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - recStartTs) / 1000);
-            const remaining = Math.max(0, MAX_RECORD_SEC - elapsed);
-            recStatus.textContent = `Registrazione — ${remaining}s rimanenti`;
-            if (remaining <= 0) {
-              // safety: pulizia tick (onstop handler farà il resto)
-              if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
-            }
-          }, 250);
-        } catch (err) {
-          console.error('Permesso microfono negato o errore:', err);
-          recStatus.textContent = 'Errore accesso microfono';
-        }
-      });
-
-      // stop manuale: ferma mediaRecorder (l'onstop si occupa di invio)
-      stopBtn.addEventListener('click', async () => {
-        if (!mediaRecorder) return;
-        try {
-          // cancella timer di auto-stop
-          if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
-          if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
-          if (mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-          } else {
-            // se non in stato 'recording' ma abbiamo chunk, processali comunque
-            const blob = new Blob(recChunks, { type: recChunks[0]?.type || 'audio/webm' });
-            const durationSec = Math.round((Date.now() - recStartTs) / 1000);
-            await processRecording(blob, durationSec);
-          }
-        } catch (e) {
-          console.warn('MediaRecorder stop error', e);
-          // cleanup forzato
-          if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
-          recordBtn.disabled = false;
-          stopBtn.disabled = true;
-          recStatus.textContent = 'Pronto';
-        }
-      });
-    }
-    // ===== fine Audio recorder buttons =====
-  }
-
-  async function handleFile(file){
-    if (!file) return;
-    if (!isConnected) return alert('Non connesso');
-    if (!e2e.ready) return alert('Scambio chiavi incompleto: premi "Avvia sessione" o attendi la chiave del peer.');
-    try{
-      const img = await blobToImage(file);
-      let { b64, width, height, blob } = await adaptAndEncodeImage(img);
-      try {
-        const { iv, ct } = await e2e.encrypt(b64);
-        if (ws && ws.readyState === 1){
-          ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:width, h:height }));
-        }
-        const url = URL.createObjectURL(blob);
-        addImage(url, 'me');
-      } catch (err) {
-        console.warn('Encrypt fallita, ritento a 320px:', err);
-        const tiny = await imageToJpegBlob(img, { maxW: 320, maxH: 320, quality: 0.68 });
-        const tinyB64 = await blobToBase64(tiny.blob);
-        const { iv, ct } = await e2e.encrypt(tinyB64);
-        if (ws && ws.readyState === 1){
-          ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:tiny.width, h:tiny.height }));
-        }
-        const url = URL.createObjectURL(tiny.blob);
-        addImage(url, 'me');
-      }
-
-    }catch(err){
-      console.error('Errore invio foto:', err);
-      alert('Errore invio foto: ' + (err && err.message ? err.message : err));
-    }
-  }
-
-  // ===== Riconnessione quando torni in foreground =====
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && (!ws || ws.readyState !== 1)) connect();
-  });
-});
