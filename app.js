@@ -464,12 +464,14 @@ els.composer.appendChild(menu);
 
 photoBtn.addEventListener('click', (e)=>{
   e.preventDefault();
-  // posiziona il menu vicino al bottone
-  const rect = photoBtn.getBoundingClientRect();
-  const host = els.composer.getBoundingClientRect();
-  menu.style.left = Math.max(0, rect.left - host.left - 4) + 'px';
-  menu.style.top  = (rect.bottom - host.top + 6) + 'px';
-  menu.classList.toggle('hidden');
+
+  // mostra il menu centrato
+menu.classList.remove('hidden');
+menu.style.left = '50%';
+menu.style.top = '50%';
+menu.style.transform = 'translate(-50%, -50%)';
+
+ 
 });
 
 // azioni menu
