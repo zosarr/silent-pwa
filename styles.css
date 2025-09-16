@@ -156,26 +156,30 @@ header .actions {
 
 /* Mini-menu per la scelta Foto: Scatta / Galleria */
 .photo-menu {
-  position: absolute;
-  z-index: 20;
+  position: fixed;               /* fisso rispetto alla finestra */
+  z-index: 1000;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
-  box-shadow: 0 8px 20px rgba(0,0,0,.08);
-  padding: 6px;
+  box-shadow: 0 8px 20px rgba(0,0,0,.12);
+  padding: 12px;
   display: flex;
-  gap: 6px;
+  flex-direction: column;        /* bottoni uno sotto l'altro */
+  gap: 10px;
+  min-width: 160px;
 }
 .photo-menu.hidden { display: none; }
 
 .photo-menu button {
   border: 0;
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 10px;
+  font-size: 1rem;
   background: #f3f4f6;
   color: #111;
   cursor: pointer;
 }
 .photo-menu button[data-act="camera"] { background: #16a34a; color: #fff; }
-.photo-menu button:hover { filter: brightness(0.97); }
+.photo-menu button:hover { filter: brightness(0.95); }
+
 
