@@ -8,8 +8,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
 
   // ===== Stato =====
-  let sessionStarted = false;     // E2E parte solo dopo il click
-  let pendingPeerKey = null;      // eventuale chiave ricevuta prima del click
   let ws = null;
   let e2e = new E2E();
   let isConnecting = false;
@@ -162,7 +160,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const color = connected ? '#16a34a' : '#dc2626';
 
     if (els.connTitle) {
-      els.connTitle.textContent = `Connessione ${txt}`;
+      els.connTitle.textContent = `Connessione: ${txt}`;
       els.connTitle.style.color = color;
       els.connTitle.style.fontWeight = '700';
     }
@@ -264,8 +262,8 @@ window.addEventListener('DOMContentLoaded', () => {
       setConnState(true);
       backoffMs = 2000;
       await ensureKeys();
-      //const myRaw = myPubExpected || (els.myPub?.value || '');
-      //try { ws.send(JSON.stringify({ type: 'key', raw: myRaw })); } catch {}
+      const myRaw = myPubExpected || (els.myPub?.value || '');
+      try { ws.send(JSON.stringify({ type: 'key', raw: myRaw })); } catch {}
     });
 
     ws.addEventListener('close', (ev) => {
@@ -286,32 +284,15 @@ window.addEventListener('DOMContentLoaded', () => {
         if (msg.type === 'ping') return;
 
         if (msg.type === 'key') {
-  await ensureKeys();
-  const peerRaw = (msg.raw || '').trim();
-  const myRaw   = (myPubExpected || els.myPub?.value || '').trim();
+          await ensureKeys();
+          const peerRaw = (msg.raw || '').trim();
+          const myRaw   = (myPubExpected || els.myPub?.value || '').trim();
 
-  // ignora la mia chiave
-  if (!peerRaw || peerRaw === myRaw) return;
-
-  // se non ho ancora avviato la sessione, memorizzo e aspetto il click
-  if (!sessionStarted) {
-    pendingPeerKey = peerRaw;
-    console.log('[E2E] chiave peer ricevuta ma in attesa di "Avvia sessione"');
-    return;
-  }
-
-  // sessione già avviata → imposto ora la chiave
-  if (e2e.ready && e2e.peerPubRawB64 === peerRaw) return;
-  try {
-    await e2e.setPeerPublicKey(peerRaw);
-    e2e.peerPubRawB64 = peerRaw;
-    if (els.connTitle) els.connTitle.textContent = 'Connessione: connesso (E2E attiva)';
-  } catch (e) {
-    console.error('setPeerPublicKey error:', e);
-  }
-  return;
-}
-
+          // Se il server ributta la TUA chiave, ignorala
+          if (!peerRaw || peerRaw === myRaw) {
+            console.log('[E2E] ricevuta la mia chiave → ignoro');
+            return;
+          }
 
           // Evita reset inutili
           if (e2e.ready && e2e.peerPubRawB64 === peerRaw) return;
@@ -365,46 +346,31 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // ===== Avvia Sessione =====
   els.startBtn && els.startBtn.addEventListener('click', async (e) => {
-  e.preventDefault();
-  await ensureKeys();
+    e.preventDefault();
+    await ensureKeys(); // NON rigenera più
+    const peerRaw = (els.peerPub?.value || '').trim();
+    if (!peerRaw) return alert('Incolla la chiave del peer');
 
-  // dichiara esplicitamente che l'utente ha avviato la sessione
-  sessionStarted = true;
+    try {
+      await e2e.setPeerPublicKey(peerRaw);   // ora e2e.ready = true
+      e2e.peerPubRawB64 = peerRaw;          // memorizza per confronti futuri
 
-  // se l'utente ha incollato la chiave, usala;
-  // altrimenti, se avevi già ricevuto una chiave, usa quella pending
-  let peerRaw = (els.peerPub?.value || '').trim();
-  if (!peerRaw && pendingPeerKey) {
-    peerRaw = pendingPeerKey;
-  }
+      // reinvia la mia chiave, così il peer mi imposta
+      if (ws && ws.readyState === 1) {
+        const myRaw = myPubExpected || (els.myPub?.value || '');
+        ws.send(JSON.stringify({ type: 'key', raw: myRaw }));
+      }
 
-  if (!peerRaw) {
-    alert('Incolla la chiave del peer oppure attendi che arrivi e ripremi "Avvia sessione".');
-    return;
-  }
+      // chiudi il <details> "Scambio chiavi"
+      const details = document.querySelector('details');
+      if (details) details.open = false;
 
-  try {
-    await e2e.setPeerPublicKey(peerRaw);
-    e2e.peerPubRawB64 = peerRaw;
-
-    // ora invia la tua chiave una sola volta
-    if (ws && ws.readyState === 1) {
-      const myRaw = myPubExpected || (els.myPub?.value || '');
-      ws.send(JSON.stringify({ type: 'key', raw: myRaw }));
+      if (els.connTitle) els.connTitle.textContent = 'Connessione: connesso (E2E attiva)';
+    } catch (err) {
+      console.error('Errore Avvia sessione:', err);
+      alert('Errore avvio sessione: ' + (err && err.message ? err.message : err));
     }
-
-    // chiudi la sezione <details>
-    const details = document.querySelector('details');
-    if (details) details.open = false;
-
-    if (els.connTitle) els.connTitle.textContent = 'Connessione: connesso (E2E attiva)';
-  } catch (err) {
-    console.error('Errore Avvia sessione:', err);
-    alert('Errore avvio sessione: ' + (err && err.message ? err.message : err));
-  }
-});
-
-     
+  });
 
   // ===== Invia messaggio di testo =====
   els.sendBtn && els.sendBtn.addEventListener('click', async () => {
