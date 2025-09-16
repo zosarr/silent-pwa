@@ -452,7 +452,7 @@ window.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(galleryInput);
 
     photoBtn.addEventListener('click', ()=>{
-      const scatta = window.confirm('Scattare una foto?\nPremi "Annulla" per scegliere dalla galleria.');
+      const scatta = window.confirm('Scattare una foto?\nPremi "Gallery" per scegliere dalla galleria.');
       (scatta ? cameraInput : galleryInput).click();
     });
 
