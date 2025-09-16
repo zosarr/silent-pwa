@@ -164,7 +164,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const color = connected ? '#16a34a' : '#dc2626';
 
     if (els.connTitle) {
-      els.connTitle.textContent = `Connessione: ${txt}`;
+      els.connTitle.textContent = `: ${txt}`;
       els.connTitle.style.color = color;
      els.connTitle.style.fontWeight = '700';
    }
@@ -220,7 +220,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try {
       await navigator.clipboard.writeText(els.myPub?.value || '');
       if (els.connTitle) {
-        els.connTitle.textContent = 'Connessione: chiave copiata ✔';
+        els.connTitle.textContent = ': chiave copiata ✔';
         setTimeout(() => setConnState(isConnected), 1200);
       }
     } catch (e) {
@@ -313,7 +313,7 @@ window.addEventListener('DOMContentLoaded', () => {
           try {
             await e2e.setPeerPublicKey(peerRaw);
             e2e.peerPubRawB64 = peerRaw;
-            if (els.connTitle) els.connTitle.textContent = 'Connessione: connesso (E2E attiva)';
+            if (els.connTitle) els.connTitle.textContent = ': connesso (E2E attiva)';
             console.log('[E2E] peer key impostata');
           } catch (e) {
             console.error('setPeerPublicKey error:', e);
@@ -387,7 +387,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const details = document.querySelector('details');
       if (details) details.open = false;
 
-      if (els.connTitle) els.connTitle.textContent = 'Connessione: connesso (E2E attiva)';
+      if (els.connTitle) els.connTitle.textContent = ': connesso (E2E attiva)';
     } catch (err) {
       console.error('Errore Avvia sessione:', err);
       alert('Errore avvio sessione: ' + (err && err.message ? err.message : err));
