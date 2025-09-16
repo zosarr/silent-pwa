@@ -534,3 +534,79 @@ document.addEventListener('click', (e)=>{
     if (document.visibilityState === 'visible' && (!ws || ws.readyState !== 1)) connect();
   });
 });
+// ======== Inizio: registratore audio (da aggiungere in app.js) ========
+mediaRecorder.stop();
+} catch (e) {
+console.warn('MediaRecorder.stop() errore:', e);
+// comunque prova a pulire
+if (currentStream) { currentStream.getTracks().forEach(t=>t.stop()); currentStream=null; }
+recordBtn.disabled = false; stopBtn.disabled = true; resolve();
+}
+});
+}
+
+
+// helper per inserire audio nella UI locale subito
+function addAudioMessageLocal(blob, durationSec) {
+const url = URL.createObjectURL(blob);
+// implementa come preferisci nella UI; qui un esempio generico che aggiunge un elemento audio
+const container = document.createElement('div');
+container.className = 'msg audio me';
+container.innerHTML = `
+<div class="bubble">
+<audio controls src="${url}"></audio>
+<div class="meta">${durationSec}s • Inviato</div>
+</div>
+`;
+const messagesEl = document.getElementById('messages') || document.body;
+messagesEl.appendChild(container);
+// scroll verso il basso se necessario
+messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+
+// handler per messaggi audio in arrivo
+async function handleIncomingAudio(msg) {
+try {
+if (!msg.iv || !msg.ct) throw new Error('Formato messaggio audio non valido');
+const b64 = await e2e.decrypt(msg.iv, msg.ct);
+const blob = base64ToBlob(b64, msg.mime || 'audio/webm');
+const url = URL.createObjectURL(blob);
+
+
+// crea elemento nella UI per il peer
+const container = document.createElement('div');
+container.className = 'msg audio peer';
+container.innerHTML = `
+<div class="bubble">
+<audio controls src="${url}"></audio>
+<div class="meta">${msg.duration || ''}s</div>
+</div>
+`;
+const messagesEl = document.getElementById('messages') || document.body;
+messagesEl.appendChild(container);
+messagesEl.scrollTop = messagesEl.scrollHeight;
+} catch (err) {
+console.error('Errore decrittazione/gestione audio:', err);
+}
+}
+
+
+// ======== Fine: registratore audio ========
+
+
+// ======== Wiring UI: associa eventi ai pulsanti ========
+if (recordBtn && stopBtn) {
+recordBtn.addEventListener('click', async (e) => {
+await startRecording();
+});
+stopBtn.addEventListener('click', async (e) => {
+await stopAndSendRecording();
+});
+}
+
+
+// ======== Hook per integrazione con il dispatcher WebSocket ========
+// Inserisci/associa questa chiamata dentro il punto dove vengono gestiti i messaggi ws.onmessage:
+// if (msg.type === 'audio') handleIncomingAudio(msg);
+// (Se il progetto ha un dispatcher centralizzato, aggiungi verificare 'audio' lì.)
