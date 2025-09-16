@@ -163,11 +163,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const txt = connected ? 'connesso' : 'non connesso';
     const color = connected ? '#16a34a' : '#dc2626';
 
-    if (els.connTitle) {
-      els.connTitle.textContent = `Connessione: ${txt}`;
-      els.connTitle.style.color = color;
-      els.connTitle.style.fontWeight = '700';
-    }
+    //if (els.connTitle) {
+     // els.connTitle.textContent = `Connessione: ${txt}`;
+     // els.connTitle.style.color = color;
+     // els.connTitle.style.fontWeight = '700';
+   // }
     if (els.connStatus) {
       els.connStatus.textContent = connected ? 'Connesso' : 'Non connesso';
       els.connStatus.classList.toggle('connected', connected);
