@@ -56,7 +56,7 @@ dialog{border-radius:12px;border:1px solid rgba(0,0,0,.1);background:#fff;color:
   background-color: #f44336; /* rosso */
 }
 /* Nasconde solo il box di stato sotto al titolo */
-#connStatus { display: none !important; }
+/*#connStatus { display: none !important; } */
 /* Layout base lista messaggi */
 .messages {
   list-style: none;
