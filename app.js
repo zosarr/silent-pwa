@@ -451,11 +451,43 @@ window.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(cameraInput);
     document.body.appendChild(galleryInput);
 
-    photoBtn.addEventListener('click', ()=>{
-      const scatta = window.confirm('Scattare una foto?\nPremi "Gallery" per scegliere dalla galleria.');
-      (scatta ? cameraInput : galleryInput).click();
-    });
+     // --- Mini-menu Scatta / Galleria ---
+els.composer.style.position = 'relative'; // per posizionare il menu
 
+const menu = document.createElement('div');
+menu.className = 'photo-menu hidden';
+menu.innerHTML = `
+  <button type="button" data-act="camera">Scatta</button>
+  <button type="button" data-act="gallery">Galleria</button>
+`;
+els.composer.appendChild(menu);
+
+photoBtn.addEventListener('click', (e)=>{
+  e.preventDefault();
+  // posiziona il menu vicino al bottone
+  const rect = photoBtn.getBoundingClientRect();
+  const host = els.composer.getBoundingClientRect();
+  menu.style.left = Math.max(0, rect.left - host.left - 4) + 'px';
+  menu.style.top  = (rect.bottom - host.top + 6) + 'px';
+  menu.classList.toggle('hidden');
+});
+
+// azioni menu
+menu.addEventListener('click', (e)=>{
+  const act = e.target?.getAttribute('data-act');
+  if (act === 'camera') cameraInput.click();
+  if (act === 'gallery') galleryInput.click();
+  menu.classList.add('hidden');
+});
+
+// chiudi se clicchi fuori
+document.addEventListener('click', (e)=>{
+  if (!menu.contains(e.target) && e.target !== photoBtn) {
+    menu.classList.add('hidden');
+  }
+});
+
+    
     cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
     galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
   }
