@@ -1,86 +1,93 @@
 <!doctype html>
 <html lang="it">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Silent</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0d0d0f"/>
-  <link rel="apple-touch-icon" href="./icons/1.png">
-  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:#f6f7fb; margin:0; color:#111; }
+    header { background:#111827; color:#fff; padding:12px 16px; }
+    .container { max-width:980px; margin:18px auto; padding:12px; }
+    .topbar { display:flex; gap:8px; align-items:center; margin-bottom:12px; }
+    .composer { display:flex; gap:8px; align-items:center; margin-top:12px; }
+    #log { list-style:none; padding:12px; margin:0; background:#fff; border-radius:8px; height:420px; overflow:auto; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+    #log li { margin:8px 0; }
+    #log li.me { text-align:right; }
+    .bubble { display:inline-block; padding:8px 10px; border-radius:10px; background:#eef2ff; max-width:80%; }
+    .bubble.me { background:#dcfce7; }
+    button { padding:8px 10px; border-radius:8px; border:1px solid #d1d5db; background:white; cursor:pointer; }
+    button:disabled { opacity:0.55; cursor:default; }
+    input[type="text"], input[type="search"] { padding:8px; border-radius:8px; border:1px solid #e5e7eb; }
+    .meta { font-size:0.85rem; color:#6b7280; margin-top:6px; }
+    #audio-controls { display:flex; gap:8px; align-items:center; }
+    #recStatus { font-size:0.95rem; color:#374151; }
+    .small { font-size:0.9rem; color:#555; }
+    .controls-right { margin-left:auto; display:flex; gap:8px; align-items:center; }
+    details { margin-left:12px; }
+  </style>
 </head>
 <body>
   <header>
-    <div class="brand">
-      <img src="icons/1.png" alt="Silent" width="32" height="32">
-      <h1>Silent</h1>
-    </div>
-    <div class="actions">
-      <select id="langSelect" aria-label="Language">
-        <option value="it">Italiano</option>
-        <option value="en">English</option>
-      </select>
-      <button id="installBtn" class="ghost">Install</button>
-      <button id="clearBtn" class="danger" data-i18n="clear">Pulisci</button>
-    </div>
+    <h1 style="margin:0;font-size:1.05rem">Silent — chat protetta</h1>
   </header>
 
-  <main>
-<section class="panel">
- <h2 data-i18n="connection">:</h2>  
-  <!-- Box stato -->
-  <div id="connStatus" class="status-box disconnected">
-    Non connesso
-  </div>
-
-  <details>
-    <summary data-i18n="session">Scambio chiavi</summary>
-    <div class="grid2">
-      <label>
-        <span data-i18n="myPub">La mia chiave</span>
-        <textarea id="myPub" readonly></textarea>
-        <div class="row">
-          <button id="copyMyPubBtn">Copia chiave</button>
-        </div>
-      </label>
-
-     <label>
-    <span data-i18n="peerPub">Chiave utente (incolla)</span>
-    <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
-</label>
-
-    </div>
-
-    <div class="row">
-      <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
-      <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
-    </div>
-  </details>
-</section>
-
-    
-    <section class="panel">
-      <h2 data-i18n="chat">Chat</h2>
-      <ul id="log" class="messages" aria-live="polite"></ul>
-      <div class="composer">
-        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
-        <button id="sendBtn" data-i18n="send">Invia</button>
+  <main class="container">
+    <div class="topbar">
+      <div>
+        <strong data-i18n="connection">: non connesso</strong>
+        <span id="connStatus" class="small" style="margin-left:8px">Non connesso</span>
       </div>
-      <small data-i18n="autodestruct">I messaggi si autodistruggono 5 minuti dopo la lettura.</small>
+
+      <div class="controls-right">
+        <label for="langSelect" class="small">Lingua</label>
+        <select id="langSelect">
+          <option value="it">IT</option><option value="en">EN</option>
+        </select>
+
+        <button id="installBtn">Installa</button>
+        <button id="clearBtn" title="Pulisci chat">Pulisci</button>
+      </div>
+    </div>
+
+    <section>
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <div style="flex:1;">
+          <ul id="log" aria-live="polite"></ul>
+        </div>
+
+        <aside style="width:320px;">
+          <div style="background:#fff;padding:12px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.04);">
+            <div style="margin-bottom:8px">
+              <label class="small">La mia chiave</label><br/>
+              <input id="myPub" style="width:100%;margin-top:6px" readonly />
+              <button id="copyMyPubBtn" style="margin-top:6px">Copia chiave</button>
+            </div>
+
+            <div style="margin-top:8px;">
+              <label class="small">Chiave peer</label><br/>
+              <input id="peerPub" style="width:100%;margin-top:6px" placeholder="Incolla chiave peer" />
+              <button id="startSessionBtn" style="margin-top:6px">Avvia sessione</button>
+            </div>
+
+            <details style="margin-top:10px">
+              <summary>Info / Debug</summary>
+              <div style="margin-top:8px;font-size:0.9rem;color:#444">
+                <div>Endpoint WS: <span class="small" id="wsEndpoint"></span></div>
+              </div>
+            </details>
+          </div>
+        </aside>
+      </div>
+
+      <div class="composer" style="margin-top:12px;">
+        <input id="msgInput" type="text" placeholder="Scrivi un messaggio..." style="flex:1" />
+        <button id="sendBtn">Invia</button>
+        <!-- Qui verranno aggiunti i controlli foto/audio via JS -->
+      </div>
     </section>
   </main>
 
-  <footer>
-    <span>Silent • https://silent-pwa.netlify.app</span>
-  </footer>
-<!-- Audio recorder controls: copia/incolla in index.html dove vuoi i pulsanti -->
-<div id="audio-recorder-controls" style="display:flex;gap:8px;align-items:center;margin:8px 0;">
-<button id="recordBtn" type="button">🎙️ Registra</button>
-<button id="stopBtn" type="button" disabled>■ Ferma</button>
-<span id="recStatus" aria-live="polite" style="margin-left:8px;font-size:0.95rem;color:#444">Pronto</span>
-</div>
-  <script type="module" src="i18n.js"></script>
-  <script type="module" src="crypto.js"></script>
-  <script type="module" src="app.js"></script>
+  <!-- Carica lo script come module perché app.js usa import -->
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
