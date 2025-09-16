@@ -21,6 +21,10 @@ window.addEventListener('DOMContentLoaded', () => {
   let keysGenerated = false;   // genera solo una volta
   let myPubExpected = null;    // valore “bloccato” della mia chiave (base64)
 
+  // Nuovi flag per comportamento manuale E2E
+  let sessionStarted = false;  // E2E parte solo dopo click "Avvia sessione"
+  let pendingPeerKey = null;   // se ricevo la chiave prima del click la salvo
+
   // ===== DOM =====
   const $ = (s) => document.querySelector(s);
   const els = {
@@ -119,7 +123,7 @@ window.addEventListener('DOMContentLoaded', () => {
     for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
     return bytes.buffer;
   }
-  // PATCH: ridimensiona/ricomprime più aggressivo per mobile (budget più basso)
+  // Ridimensiona/ricomprime più aggressivo per mobile (budget più basso)
   async function adaptAndEncodeImage(originalImg){
     const targets = [
       {max: 960, q: 0.80},
@@ -128,7 +132,7 @@ window.addEventListener('DOMContentLoaded', () => {
       {max: 480, q: 0.72},
       {max: 360, q: 0.70},
     ];
-    // ~300k chars base64 ≈ ~225 KB effettivi
+    // ~300k chars base64 ≈ ~225 KB reali
     const SAFE_B64_LEN = 300_000;
 
     let lastBlob = null, lastW = null, lastH = null, lastB64 = null;
@@ -262,14 +266,16 @@ window.addEventListener('DOMContentLoaded', () => {
       setConnState(true);
       backoffMs = 2000;
       await ensureKeys();
-      const myRaw = myPubExpected || (els.myPub?.value || '');
-      try { ws.send(JSON.stringify({ type: 'key', raw: myRaw })); } catch {}
+      // NOTA: non inviamo la chiave qui. L'utente dovrà premere "Avvia sessione" per far partire l'E2E.
     });
 
     ws.addEventListener('close', (ev) => {
       console.warn('[WS] close', ev.code, ev.reason);
       isConnecting = false;
       setConnState(false);
+      // reset stato sessione manuale
+      sessionStarted = false;
+      pendingPeerKey = null;
       console.warn('[WS] reason:', humanCloseReason(ev));
       scheduleReconnect();
     });
@@ -294,7 +300,14 @@ window.addEventListener('DOMContentLoaded', () => {
             return;
           }
 
-          // Evita reset inutili
+          // Se la sessione non è stata ancora avviata dall'utente, memorizza la chiave in pending
+          if (!sessionStarted) {
+            pendingPeerKey = peerRaw;
+            console.log('[E2E] chiave peer ricevuta ma in attesa di "Avvia sessione"');
+            return;
+          }
+
+          // Se la sessione è iniziata, procedi a impostare la chiave peer
           if (e2e.ready && e2e.peerPubRawB64 === peerRaw) return;
 
           try {
@@ -348,17 +361,26 @@ window.addEventListener('DOMContentLoaded', () => {
   els.startBtn && els.startBtn.addEventListener('click', async (e) => {
     e.preventDefault();
     await ensureKeys(); // NON rigenera più
-    const peerRaw = (els.peerPub?.value || '').trim();
-    if (!peerRaw) return alert('Incolla la chiave del peer');
+    // l'utente ora ha esplicitamente richiesto di avviare la sessione
+    sessionStarted = true;
+
+    // preferisci la chiave incollata dall'utente, altrimenti usa quella pending
+    let peerRaw = (els.peerPub?.value || '').trim();
+    if (!peerRaw && pendingPeerKey) peerRaw = pendingPeerKey;
+
+    if (!peerRaw) {
+      alert('Incolla la chiave del peer oppure attendi che arrivi e ripremi "Avvia sessione".');
+      return;
+    }
 
     try {
       await e2e.setPeerPublicKey(peerRaw);   // ora e2e.ready = true
       e2e.peerPubRawB64 = peerRaw;          // memorizza per confronti futuri
 
-      // reinvia la mia chiave, così il peer mi imposta
+      // invia la mia chiave così il peer potrà impostare la mia chiave come peer
       if (ws && ws.readyState === 1) {
         const myRaw = myPubExpected || (els.myPub?.value || '');
-        ws.send(JSON.stringify({ type: 'key', raw: myRaw }));
+        try { ws.send(JSON.stringify({ type: 'key', raw: myRaw })); } catch {}
       }
 
       // chiudi il <details> "Scambio chiavi"
@@ -445,7 +467,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try{
       const img = await blobToImage(file);
 
-      // PATCH: invio robusto con retry su cifratura
+      // invio robusto con retry su cifratura
       let { b64, width, height, blob } = await adaptAndEncodeImage(img);
       try {
         const { iv, ct } = await e2e.encrypt(b64);
