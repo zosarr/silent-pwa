@@ -99,5 +99,59 @@ dialog{border-radius:12px;border:1px solid rgba(0,0,0,.1);background:#fff;color:
   height: auto;
   border-radius: 8px;
 }
+/* --- Base responsive & no overflow orizzontale --- */
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; overflow-x: hidden; }
+img, video { max-width: 100%; height: auto; display: block; }
+
+/* Pannelli e contenitori a tutta larghezza su mobile */
+main, header, footer, .panel { width: 100%; }
+
+/* Messaggi: impedisci che righe molto lunghe allarghino la pagina */
+.messages { width: 100%; }
+.messages li { word-break: break-word; overflow-wrap: anywhere; }
+
+/* Composer: input elastico, bottoni compatti */
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto auto; /* input | Foto | Invia */
+  gap: 8px;
+  width: 100%;
+}
+#msgInput {
+  width: 100%;
+  min-width: 0;              /* fondamentale per evitare overflow in grid/flex */
+  font-size: 16px;           /* evita zoom su iOS */
+}
+#photoBtn, #sendBtn {
+  white-space: nowrap;
+  padding: 10px 12px;
+}
+
+/* Textarea chiavi a larghezza piena */
+#myPub, #peerPub { width: 100%; max-width: 100%; }
+
+/* Header: azioni che vanno a capo se serve */
+header .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* --- Mobile specific --- */
+@media (max-width: 600px) {
+  .panel { padding: 12px; }
+  header { padding: 12px; }
+  .messages li { max-width: 88%; }         /* bolle un filo più larghe ma dentro lo schermo */
+  #photoBtn, #sendBtn { padding: 9px 10px; }
+  /* Se lo spazio è strettissimo, nascondi solo il testo "Silent" tenendo l'icona */
+  header .brand h1 { display: none; }
+}
+
+/* Schermi molto piccoli */
+@media (max-width: 360px) {
+  .composer { grid-template-columns: 1fr auto auto; gap: 6px; }
+  .messages li { max-width: 92%; }
+}
 
 
