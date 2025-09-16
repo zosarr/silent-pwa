@@ -73,7 +73,12 @@
   <footer>
     <span>Silent • https://silent-pwa.netlify.app</span>
   </footer>
-
+<!-- Audio recorder controls: copia/incolla in index.html dove vuoi i pulsanti -->
+<div id="audio-recorder-controls" style="display:flex;gap:8px;align-items:center;margin:8px 0;">
+<button id="recordBtn" type="button">🎙️ Registra</button>
+<button id="stopBtn" type="button" disabled>■ Ferma</button>
+<span id="recStatus" aria-live="polite" style="margin-left:8px;font-size:0.95rem;color:#444">Pronto</span>
+</div>
   <script type="module" src="i18n.js"></script>
   <script type="module" src="crypto.js"></script>
   <script type="module" src="app.js"></script>
