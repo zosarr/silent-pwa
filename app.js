@@ -277,23 +277,122 @@ window.addEventListener('DOMContentLoaded', () => {
   els.input && els.input.addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); els.sendBtn.click(); }});
   els.clearBtn && els.clearBtn.addEventListener('click',()=>{ if(els.log) els.log.innerHTML=''; });
 
-  // ===== Foto =====
+  // ===== Foto: mini-menu Scatta / Galleria =====
   function ensurePhotoControls(){
-    if (!els.composer||document.getElementById('photoBtn')) return;
-    const photoBtn=document.createElement('button'); photoBtn.id='photoBtn'; photoBtn.textContent='Foto'; photoBtn.style.marginLeft='6px'; els.composer.appendChild(photoBtn);
-    const cam=document.createElement('input'); cam.type='file'; cam.accept='image/*'; cam.capture='environment'; cam.style.display='none';
-    const gal=document.createElement('input'); gal.type='file'; gal.accept='image/*'; gal.style.display='none';
-    document.body.appendChild(cam); document.body.appendChild(gal);
-    photoBtn.addEventListener('click',(e)=>{e.preventDefault(); cam.click();});
-    cam.addEventListener('change',()=>handleFile(cam.files[0])); gal.addEventListener('change',()=>handleFile(gal.files[0]));
+    if (!els.composer || document.getElementById('photoBtn')) return;
+
+    // Bottone "Foto"
+    const photoBtn = document.createElement('button');
+    photoBtn.id = 'photoBtn';
+    photoBtn.textContent = 'Foto';
+    photoBtn.title = 'Scatta o scegli dalla galleria';
+    photoBtn.style.marginLeft = '6px';
+    els.composer.appendChild(photoBtn);
+
+    // Input nascosti: camera & galleria
+    const cameraInput  = document.createElement('input');
+    cameraInput.type = 'file';
+    cameraInput.accept = 'image/*';
+    cameraInput.capture = 'environment';
+    cameraInput.style.display = 'none';
+
+    const galleryInput = document.createElement('input');
+    galleryInput.type = 'file';
+    galleryInput.accept = 'image/*';
+    galleryInput.style.display = 'none';
+
+    document.body.appendChild(cameraInput);
+    document.body.appendChild(galleryInput);
+
+    // Contenitore per posizionamento del menu
+    if (getComputedStyle(els.composer).position === 'static') {
+      els.composer.style.position = 'relative';
+    }
+
+    // Mini-menu sovrapposto
+    const menu = document.createElement('div');
+    menu.id = 'photoMenu';
+    menu.style.position = 'absolute';
+    menu.style.left = '50%';
+    menu.style.top = '50%';
+    menu.style.transform = 'translate(-50%, -50%)';
+    menu.style.background = '#ffffff';
+    menu.style.border = '1px solid #e5e7eb';
+    menu.style.boxShadow = '0 10px 15px rgba(0,0,0,0.1), 0 4px 6px rgba(0,0,0,0.05)';
+    menu.style.borderRadius = '10px';
+    menu.style.padding = '8px';
+    menu.style.display = 'none';
+    menu.style.zIndex = '9999';
+    menu.innerHTML = `
+      <button type="button" data-act="camera" style="display:block;width:160px;padding:8px;border-radius:8px;border:1px solid #e5e7eb;margin:4px 0;background:#f9fafb;">📷 Scatta</button>
+      <button type="button" data-act="gallery" style="display:block;width:160px;padding:8px;border-radius:8px;border:1px solid #e5e7eb;margin:4px 0;background:#f9fafb;">🖼️ Galleria</button>
+      <button type="button" data-act="close" style="display:block;width:160px;padding:6px;border:none;margin:2px 0;background:transparent;color:#6b7280;">Annulla</button>
+    `;
+    els.composer.appendChild(menu);
+
+    const openMenu  = () => { menu.style.display = 'block'; };
+    const closeMenu = () => { menu.style.display = 'none'; };
+
+    // Apertura menu
+    photoBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (menu.style.display === 'block') closeMenu();
+      else openMenu();
+    });
+
+    // Scelte nel menu
+    menu.addEventListener('click', (e) => {
+      const act = e.target?.getAttribute('data-act');
+      if (act === 'camera') {
+        closeMenu();
+        cameraInput.click();
+      } else if (act === 'gallery') {
+        closeMenu();
+        galleryInput.click();
+      } else if (act === 'close') {
+        closeMenu();
+      }
+    });
+
+    // Chiudi cliccando fuori
+    document.addEventListener('click', (e) => {
+      const clickedInside = menu.contains(e.target) || e.target === photoBtn;
+      if (!clickedInside) closeMenu();
+    });
+
+    // Chiudi con ESC
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeMenu();
+    });
+
+    // Selezione file → invio
+    cameraInput.addEventListener('change', () => {
+      if (cameraInput.files && cameraInput.files[0]) {
+        closeMenu();
+        handleFile(cameraInput.files[0]);
+        cameraInput.value = '';
+      }
+    });
+    galleryInput.addEventListener('change', () => {
+      if (galleryInput.files && galleryInput.files[0]) {
+        closeMenu();
+        handleFile(galleryInput.files[0]);
+        galleryInput.value = '';
+      }
+    });
   }
+
   async function handleFile(file){
     if (!file||!isConnected||!e2e.ready) return;
-    const img=await blobToImage(file);
-    let {b64,width,height,blob}=await adaptAndEncodeImage(img);
-    const {iv,ct}=await e2e.encrypt(b64);
-    if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'image',iv,ct,mime:'image/jpeg',w:width,h:height}));
-    addImage(URL.createObjectURL(blob),'me');
+    try{
+      const img=await blobToImage(file);
+      let {b64,width,height,blob}=await adaptAndEncodeImage(img);
+      const {iv,ct}=await e2e.encrypt(b64);
+      if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'image',iv,ct,mime:'image/jpeg',w:width,h:height}));
+      addImage(URL.createObjectURL(blob),'me');
+    }catch(err){
+      alert('Errore invio foto: '+(err?.message||err));
+    }
   }
 
   // ===== AUDIO =====
