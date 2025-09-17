@@ -242,8 +242,16 @@ const FORCED_WS = forced || AUTO_WS_URL;
     isConnecting=true; setConnState(false);
     try{ ws=new WebSocket(FORCED_WS);}catch(e){ isConnecting=false; return;}
     ws.addEventListener('open',async ()=>{isConnecting=false; setConnState(true); backoffMs=2000; await ensureKeys();});
-    ws.addEventListener('close',()=>{ try{ ws && ws.send && ws.send(JSON.stringify({type:'not_ready'})); }catch(e){} readySent=false; havePeerKey=false;isConnecting=false; setConnState(false); sessionStarted=false;
-    ws.addEventListener('message',async ev=>{
+    ws.addEventListener('close',()=>{
+  try{ if (ws && ws.send) ws.send(JSON.stringify({type:'not_ready'})); }catch(e){}
+  readySent=false; havePeerKey=false;
+  isConnecting=false; isConnected=false;
+  setConnState(false);
+  sessionStarted=false;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(connect, backoffMs = Math.min(backoffMs*2, 15000));
+});
+ws.addEventListener('message',async ev=>{
       try{
         const msg=JSON.parse(ev.data);
         if (msg.type==='key'){
