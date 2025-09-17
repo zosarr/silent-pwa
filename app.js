@@ -14,7 +14,6 @@ window.addEventListener('DOMContentLoaded', () => {
   let e2e = new E2E();
   let isConnecting = false;
   let isConnected = false;
-  let reconnectTimer = null;
   let backoffMs = 2000;
 
   let deferredPrompt = null;
@@ -25,6 +24,40 @@ window.addEventListener('DOMContentLoaded', () => {
   let sessionStarted = false;
   let pendingPeerKey = null;
 
+  // ===== Presenza peer =====
+  let myId = null;
+  let peerOnline = false;
+  let lastPeerSeenAt = 0;
+  let members = new Map(); // id -> { joinedAt }
+
+  function humanAgo(ms){
+    const s = Math.floor(ms/1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s/60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m/60);
+    return `${h}h`;
+  }
+  function setPeerPresence(online){
+    peerOnline = !!online;
+    if (els.connStatus) {
+      const base = isConnected ? 'WS: connesso' : 'WS: disconnesso';
+      const peer = peerOnline ? ` | Peer: online (ultimo visto ${humanAgo(Date.now()-lastPeerSeenAt)})`
+                              : ` | Peer: offline`;
+      els.connStatus.textContent = base + peer;
+    }
+  }
+  function touchPeerSeen(){
+    lastPeerSeenAt = Date.now();
+    if (!peerOnline) setPeerPresence(true);
+  }
+  function updatePeerFromMembers(){
+    const others = Array.from(members.keys()).filter(id => id !== myId);
+    const online = others.length > 0;
+    setPeerPresence(online);
+    if (online) touchPeerSeen();
+  }
+
   // ===== DOM =====
   const $ = (s) => document.querySelector(s);
   const els = {
@@ -34,46 +67,80 @@ window.addEventListener('DOMContentLoaded', () => {
     connTitle:   document.querySelector('[data-i18n="connection"]'),
     connStatus:  $('#connStatus'),
     myPub:       $('#myPub'),
-    copyMyBtn:   $('#copyMyPubBtn'),
     peerPub:     $('#peerPub'),
-    startBtn:    $('#startSessionBtn'),
+    startBtn:    $('#startSession'),
     log:         $('#log'),
     input:       $('#msgInput'),
     sendBtn:     $('#sendBtn'),
-    composer:    document.querySelector('.composer'),
+    photoBtn:    $('#photoBtn'),
+    audioBtns:   $('#audioControls'),
+    recBtn:      $('#recBtn'),
+    stopBtn:     $('#stopBtn'),
+    timerBadge:  $('#timerBadge'),
+    video:       $('#video'),
+    canvas:      $('#canvas'),
+    snapBtn:     $('#snapBtn'),
+    clearPhoto:  $('#clearPhoto')
   };
 
-  // ===== Utils =====
-  const escapeHtml = (s) => (s ? s.replace(/[&<>"']/g, m => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[m])) : '');
+  applyLang(els.langSel);
 
-  function addMsg(text, who = 'peer') {
+  // ===== Install PWA =====
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (els.installBtn) els.installBtn.style.display = 'inline-flex';
+  });
+  els.installBtn?.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') els.installBtn.style.display = 'none';
+    deferredPrompt = null;
+  });
+
+  // ===== Utility UI =====
+  function setConnState(ok){
+    isConnected = !!ok;
+    if (els.connTitle) {
+      els.connTitle.textContent = ok ? ': connesso' : ': disconnesso';
+      els.connTitle.style.color = ok ? '#16a34a' : '#ef4444';
+      setTimeout(() => {
+        els.connTitle.style.color = '#16a34a';
+        setTimeout(() => setConnState(isConnected), 1200);
+      }, 120);
+    }
+    // aggiorna anche presenza
+    setPeerPresence(peerOnline && ok);
+  }
+
+  function addMsg(text, who='me'){
     if (!els.log) return;
     const li = document.createElement('li');
     li.className = who;
-    li.innerHTML = escapeHtml(text);
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    li.appendChild(bubble);
     els.log.appendChild(li);
     els.log.scrollTop = els.log.scrollHeight;
-    setTimeout(() => li.remove(), 5*60*1000);
   }
 
-  function addImage(url, who='peer'){
+  function addImage(url, who='me'){
     if (!els.log) return;
     const li = document.createElement('li');
     li.className = who;
     const img = document.createElement('img');
     img.src = url;
-    img.alt = 'foto';
     img.style.maxWidth = '70%';
-    img.style.borderRadius = '8px';
+    img.style.borderRadius = '12px';
+    img.onload = () => URL.revokeObjectURL(url);
     li.appendChild(img);
     els.log.appendChild(li);
     els.log.scrollTop = els.log.scrollHeight;
-    setTimeout(()=>{ URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
   }
 
-  function addAudio(url, who='peer', mime='audio/webm'){
+  function addAudio(url, who='me', mime='audio/webm'){
     if (!els.log) return;
     const li = document.createElement('li');
     li.className = who;
@@ -90,472 +157,160 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function blobToImage(blob){
-    return new Promise((resolve,reject)=>{
-      const url = URL.createObjectURL(blob);
+    return new Promise((res, rej)=>{
       const img = new Image();
-      img.onload = ()=>{ URL.revokeObjectURL(url); resolve(img); };
-      img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Immagine non valida')); };
-      img.src = url;
+      img.onload = ()=> res(img);
+      img.onerror = rej;
+      img.src = URL.createObjectURL(blob);
     });
   }
-  function imageToJpegBlob(img, {maxW=1280, maxH=1280, quality=0.85}={}){
-    const w = img.naturalWidth, h = img.naturalHeight;
-    const r = Math.min(maxW/w, maxH/h, 1);
-    const nw = Math.round(w*r), nh = Math.round(h*r);
-    const canvas = document.createElement('canvas');
-    canvas.width = nw; canvas.height = nh;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, nw, nh);
-    return new Promise((resolve)=>{
-      if (canvas.toBlob){
-        canvas.toBlob(b => resolve({ blob: b, width: nw, height: nh }), 'image/jpeg', quality);
-      } else {
-        const dataURL = canvas.toDataURL('image/jpeg', quality);
-        fetch(dataURL).then(r=>r.blob()).then(b=>resolve({ blob:b, width:nw, height:nh }));
-      }
-    });
-  }
-  function blobToBase64(blob){
-    return new Promise((resolve,reject)=>{
-      const reader = new FileReader();
-      reader.onload = ()=> {
-        const dataUrl = reader.result || '';
-        resolve(String(dataUrl).split(',')[1] || '');
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-  function b64ToAb(b64){
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-    return bytes.buffer;
-  }
 
-  async function adaptAndEncodeImage(originalImg){
-    const targets = [
-      {max:960,q:0.80},{max:720,q:0.76},{max:600,q:0.74},
-      {max:480,q:0.72},{max:360,q:0.70},
-    ];
-    // ~300k chars base64 ≈ ~225 KB reali → sicuro per cifratura/JSON
-    const SAFE_B64_LEN = 300_000;
-
-    let lastBlob=null,lastW=null,lastH=null,lastB64=null;
-
-    for (const t of targets){
-      const {blob,width,height} = await imageToJpegBlob(originalImg,{maxW:t.max,maxH:t.max,quality:t.q});
-      const b64 = await blobToBase64(blob);
-      lastBlob=blob; lastW=width; lastH=height; lastB64=b64;
-      if (b64.length <= SAFE_B64_LEN){
-        return { b64, width, height, blob };
-      }
-    }
-    // Se nessun target rientra, restituisco l'ultimo provato; il chiamante farà un'ulteriore compressione aggressiva.
-    return { b64:lastB64, width:lastW, height:lastH, blob:lastBlob };
-  }
-
-  // ===== I18N & SW =====
-  els.langSel && els.langSel.addEventListener('change', ()=>applyLang(els.langSel.value));
-  applyLang('it');
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
-
-  // ===== Stato Connessione =====
-  function setConnState(connected){
-    isConnected = !!connected;
-    const txt = connected ? 'connesso' : 'non connesso';
-    const color = connected ? '#16a34a' : '#dc2626';
-    if (els.connTitle){
-      els.connTitle.textContent = `: ${txt}`;
-      els.connTitle.style.color=color; els.connTitle.style.fontWeight='700';
-    }
-    if (els.connStatus){
-      els.connStatus.textContent = connected?'Connesso':'Non connesso';
-      els.connStatus.classList.toggle('connected',connected);
-      els.connStatus.classList.toggle('disconnected',!connected);
-    }
-  }
-  setConnState(false);
-
-  // ===== Install PWA =====
-  window.addEventListener('beforeinstallprompt',(e)=>{e.preventDefault(); deferredPrompt=e;});
-  els.installBtn && els.installBtn.addEventListener('click', async ()=>{
-    if (deferredPrompt){ deferredPrompt.prompt(); try{await deferredPrompt.userChoice;}catch{} deferredPrompt=null; return;}
-    const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
-    const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
-    if (isStandalone) alert('L’app è già installata.');
-    else if (isIOS) alert('iPhone/iPad: Condividi → Aggiungi alla schermata Home.');
-    else alert('Menu browser → Installa app / Aggiungi alla schermata Home.');
-  });
-
-  // ===== E2E =====
+  // ===== Crypto / E2E =====
   async function ensureKeys(){
     if (keysGenerated) return;
-    if (!e2e.myPubRaw){
-      const pub=await e2e.init();
-      myPubExpected=pub;
-      if (els.myPub) els.myPub.value=pub;
-      if (els.myPub){
-        els.myPub.readOnly=true;
-        els.myPub.addEventListener('input',()=>{ if(myPubExpected&&els.myPub.value!==myPubExpected) els.myPub.value=myPubExpected; });
-      }
-    }
-    keysGenerated=true;
+    await e2e.init();
+    const { pubRawB64 } = await e2e.generateKeyPair();
+    keysGenerated = true;
+    if (els.myPub) els.myPub.value = pubRawB64;
   }
 
-  // Copia chiave – mostra ✔ e poi ripristina stato
-  els.copyMyBtn && els.copyMyBtn.addEventListener('click', async () => {
+  // Scambio chiavi (manuale + aggancio automatico quando riceviamo "key")
+  els.startBtn?.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(els.myPub?.value || '');
-      if (els.connTitle) {
-        els.connTitle.textContent = ': chiave copiata ✔';
-        els.connTitle.style.color = '#16a34a';
-        setTimeout(() => setConnState(isConnected), 1200);
-      }
-    } catch (e) {
-      alert('Impossibile copiare: ' + e.message);
-    }
-  });
-
-  // ===== WebSocket =====
-  function connect(){
-    if (isConnecting||isConnected) return;
-    isConnecting=true; setConnState(false);
-    try{ ws=new WebSocket(FORCED_WS);}catch(e){ isConnecting=false; return;}
-    ws.addEventListener('open',async ()=>{isConnecting=false; setConnState(true); backoffMs=2000; await ensureKeys();});
-    ws.addEventListener('close',()=>{isConnecting=false; setConnState(false); sessionStarted=false; pendingPeerKey=null; setTimeout(connect,backoffMs=Math.min(backoffMs*2,15000));});
-    ws.addEventListener('message',async ev=>{
-      try{
-        const msg=JSON.parse(ev.data);
-        if (msg.type==='key'){
-          await ensureKeys();
-          const peerRaw=(msg.raw||'').trim();
-          if (!peerRaw||peerRaw===(myPubExpected||els.myPub?.value||'').trim()) return;
-          if (!sessionStarted){ pendingPeerKey=peerRaw; return;}
-          await e2e.setPeerPublicKey(peerRaw); e2e.peerPubRawB64=peerRaw;
-          if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
-          return;
-        }
-        if (!e2e.ready) return;
-        if (msg.type==='msg'){ addMsg(await e2e.decrypt(msg.iv,msg.ct),'peer'); return;}
-        if (msg.type==='image'){ const b64=await e2e.decrypt(msg.iv,msg.ct); const buf=b64ToAb(b64); const blob=new Blob([buf],{type:msg.mime||'image/jpeg'}); addImage(URL.createObjectURL(blob),'peer'); return;}
-        if (msg.type==='audio'){ const b64=await e2e.decrypt(msg.iv,msg.ct); const buf=b64ToAb(b64); const blob=new Blob([buf],{type:msg.mime||'audio/webm'}); addAudio(URL.createObjectURL(blob),'peer',msg.mime); return;}
-      }catch(e){console.error(e);}
-    });
-  }
-
-  // ===== Avvia sessione =====
-  els.startBtn && els.startBtn.addEventListener('click',async ()=>{
-    await ensureKeys();
-    sessionStarted=true;
-    let peerRaw=(els.peerPub?.value||'').trim();
-    if (!peerRaw&&pendingPeerKey) peerRaw=pendingPeerKey;
-    if (!peerRaw) return alert('Incolla la chiave del peer o attendi.');
-
-    try {
-      await e2e.setPeerPublicKey(peerRaw);         // E2E pronto
-      e2e.peerPubRawB64=peerRaw;
-
-      if (ws&&ws.readyState===1){
-        ws.send(JSON.stringify({type:'key',raw:myPubExpected||(els.myPub?.value||'')}));
-      }
-
-      if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
-
-      // chiudi la tendina "Scambio di chiavi"
-      const details = document.querySelector('details');
-      if (details) details.open = false;
-
-    } catch (err) {
-      console.error('Errore Avvia sessione:', err);
-      alert('Errore avvio sessione: ' + (err?.message || err));
-    }
-  });
-
-  // ===== Invia testo =====
-  els.sendBtn && els.sendBtn.addEventListener('click',async ()=>{
-    if (!isConnected||!e2e.ready) return alert('Non connesso o E2E non pronto');
-    const text=(els.input?.value||'').trim(); if (!text) return;
-    const {iv,ct}=await e2e.encrypt(text);
-    if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'msg',iv,ct}));
-    addMsg(text,'me'); if (els.input) els.input.value='';
-  });
-  els.input && els.input.addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); els.sendBtn.click(); }});
-  els.clearBtn && els.clearBtn.addEventListener('click',()=>{ if(els.log) els.log.innerHTML=''; });
-
-  // ===== Foto: mini-menu Scatta / Galleria =====
-  function ensurePhotoControls(){
-    if (!els.composer || document.getElementById('photoBtn')) return;
-
-    // Bottone "Foto"
-    const photoBtn = document.createElement('button');
-    photoBtn.id = 'photoBtn';
-    photoBtn.textContent = 'Foto';
-    photoBtn.title = 'Scatta o scegli dalla galleria';
-    photoBtn.style.marginLeft = '6px';
-    els.composer.appendChild(photoBtn);
-
-    // Input nascosti: camera & galleria
-    const cameraInput  = document.createElement('input');
-    cameraInput.type = 'file';
-    cameraInput.accept = 'image/*';
-    cameraInput.capture = 'environment';
-    cameraInput.style.display = 'none';
-
-    const galleryInput = document.createElement('input');
-    galleryInput.type = 'file';
-    galleryInput.accept = 'image/*';
-    galleryInput.style.display = 'none';
-
-    document.body.appendChild(cameraInput);
-    document.body.appendChild(galleryInput);
-
-    // Contenitore per posizionamento del menu
-    if (getComputedStyle(els.composer).position === 'static') {
-      els.composer.style.position = 'relative';
-    }
-
-    // Mini-menu sovrapposto
-    const menu = document.createElement('div');
-    menu.id = 'photoMenu';
-    menu.style.position = 'absolute';
-    menu.style.left = '50%';
-    menu.style.top = '50%';
-    menu.style.transform = 'translate(-50%, -50%)';
-    menu.style.background = '#ffffff';
-    menu.style.border = '1px solid #e5e7eb';
-    menu.style.boxShadow = '0 10px 15px rgba(0,0,0,0.1), 0 4px 6px rgba(0,0,0,0.05)';
-    menu.style.borderRadius = '10px';
-    menu.style.padding = '8px';
-    menu.style.display = 'none';
-    menu.style.zIndex = '9999';
-    menu.innerHTML = `
-      <button type="button" data-act="camera" style="display:block;width:160px;padding:8px;border-radius:8px;border:1px solid #e5e7eb;margin:4px 0;background:#f9fafb;">📷 Scatta</button>
-      <button type="button" data-act="gallery" style="display:block;width:160px;padding:8px;border-radius:8px;border:1px solid #e5e7eb;margin:4px 0;background:#f9fafb;">🖼️ Galleria</button>
-      <button type="button" data-act="close" style="display:block;width:160px;padding:6px;border:none;margin:2px 0;background:transparent;color:#6b7280;">Annulla</button>
-    `;
-    els.composer.appendChild(menu);
-
-    const openMenu  = () => { menu.style.display = 'block'; };
-    const closeMenu = () => { menu.style.display = 'none'; };
-
-    // Apertura menu
-    photoBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (menu.style.display === 'block') closeMenu();
-      else openMenu();
-    });
-
-    // Scelte nel menu
-    menu.addEventListener('click', (e) => {
-      const act = e.target?.getAttribute('data-act');
-      if (act === 'camera') {
-        closeMenu();
-        cameraInput.click();
-      } else if (act === 'gallery') {
-        closeMenu();
-        galleryInput.click();
-      } else if (act === 'close') {
-        closeMenu();
-      }
-    });
-
-    // Chiudi cliccando fuori
-    document.addEventListener('click', (e) => {
-      const clickedInside = menu.contains(e.target) || e.target === photoBtn;
-      if (!clickedInside) closeMenu();
-    });
-
-    // Chiudi con ESC
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeMenu();
-    });
-
-    // Selezione file → invio
-    cameraInput.addEventListener('change', () => {
-      if (cameraInput.files && cameraInput.files[0]) {
-        closeMenu();
-        handleFile(cameraInput.files[0]);
-        cameraInput.value = '';
-      }
-    });
-    galleryInput.addEventListener('change', () => {
-      if (galleryInput.files && galleryInput.files[0]) {
-        closeMenu();
-        handleFile(galleryInput.files[0]);
-        galleryInput.value = '';
-      }
-    });
-  }
-
-  // === Guard-rail dimensione per immagini ===
-  const IMG_MAX_B64_SAFE = 300_000; // ~225KB effettivi
-
-  async function handleFile(file){
-    if (!file||!isConnected||!e2e.ready) return;
-    try{
-      const img = await blobToImage(file);
-
-      // Prima passata con profili progressivi
-      let { b64, width, height, blob } = await adaptAndEncodeImage(img);
-
-      // Se ancora troppo grande, compressione aggressiva 320px
-      if (b64.length > IMG_MAX_B64_SAFE) {
-        const tiny = await imageToJpegBlob(img, { maxW: 320, maxH: 320, quality: 0.68 });
-        const tinyB64 = await blobToBase64(tiny.blob);
-
-        if (tinyB64.length > IMG_MAX_B64_SAFE) {
-          addMsg('⚠️ Immagine troppo grande anche dopo compressione. Riprova con una foto più piccola.', 'me');
-          return;
-        }
-        b64 = tinyB64; width = tiny.width; height = tiny.height; blob = tiny.blob;
-      }
-
-      // Cifratura + invio (con fallback estremo se la cifratura dovesse fallire)
-      try {
-        const { iv, ct } = await e2e.encrypt(b64);
-        if (ws && ws.readyState === 1){
-          ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:width, h:height }));
-        }
-        addImage(URL.createObjectURL(blob), 'me');
-      } catch (encErr) {
-        console.warn('Encrypt immagine fallita, riprovo a 320px:', encErr);
-        const tiny2 = await imageToJpegBlob(img, { maxW: 320, maxH: 320, quality: 0.68 });
-        const tinyB64_2 = await blobToBase64(tiny2.blob);
-        if (tinyB64_2.length > IMG_MAX_B64_SAFE) {
-          addMsg('⚠️ Immagine troppo grande per invio sicuro.', 'me');
-          return;
-        }
-        const { iv, ct } = await e2e.encrypt(tinyB64_2);
-        if (ws && ws.readyState === 1){
-          ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:tiny2.width, h:tiny2.height }));
-        }
-        addImage(URL.createObjectURL(tiny2.blob), 'me');
-      }
-
-    }catch(err){
-      console.error('Errore invio foto:', err);
-      alert('Errore invio foto: ' + (err && err.message ? err.message : err));
-    }
-  }
-
-  // ===== AUDIO =====
-  let mediaStream=null, mediaRecorder=null, audioChunks=[], audioMime='audio/webm;codecs=opus', audioTimer=null;
-  const MAX_B64_SAFE=300_000;
-
-  // --- Badge countdown accanto a "Chat"
-  let recBadge = null;
-  let countdownInterval = null;
-  let remainingSec = 60;
-
-  function findChatTitleElement() {
-    // prova selettori comuni, poi cerca un heading che contenga "chat"
-    return (
-      document.querySelector('[data-i18n="chat"]') ||
-      document.querySelector('#chatTitle') ||
-      Array.from(document.querySelectorAll('h1,h2,h3,.title,.header'))
-        .find(el => (el.textContent || '').trim().toLowerCase().includes('chat'))
-    );
-  }
-
-  function ensureRecBadge() {
-    const target = findChatTitleElement();
-    if (!target) return null;
-    if (!recBadge) {
-      recBadge = document.createElement('span');
-      recBadge.id = 'recBadge';
-      recBadge.style.marginLeft = '8px';
-      recBadge.style.padding = '2px 8px';
-      recBadge.style.borderRadius = '999px';
-      recBadge.style.background = '#ef4444'; // rosso
-      recBadge.style.color = '#fff';
-      recBadge.style.fontSize = '0.85rem';
-      recBadge.style.fontWeight = '600';
-      recBadge.style.display = 'none';
-    }
-    if (!recBadge.parentElement) target.appendChild(recBadge);
-    return recBadge;
-  }
-
-  function showRecBadge(maxSec = 60) {
-    const badge = ensureRecBadge();
-    if (!badge) return;
-    clearInterval(countdownInterval);
-    remainingSec = maxSec;
-    badge.textContent = `🎙️ max rec ${maxSec} sec · ${remainingSec}`;
-    badge.style.display = 'inline-block';
-    countdownInterval = setInterval(() => {
-      remainingSec -= 1;
-      if (remainingSec <= 0) {
-        badge.textContent = `🎙️ max rec ${maxSec} sec · 0`;
-        clearInterval(countdownInterval);
-        countdownInterval = null;
+      await ensureKeys();
+      const peerRaw = (els.peerPub?.value || '').trim();
+      if (!peerRaw) return alert('Inserisci la chiave pubblica del peer');
+      if (!sessionStarted){
+        pendingPeerKey = peerRaw;
+        // avvia sessione
+        await startSessionIfReady();
       } else {
-        badge.textContent = `🎙️ max rec ${maxSec} sec · ${remainingSec}`;
+        await e2e.setPeerPublicKey(peerRaw); // aggiorna peer
+        e2e.peerPubRawB64 = peerRaw;
       }
-    }, 1000);
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type:'key', raw: myPubExpected || (els.myPub?.value || '') }));
+      }
+      addMsg('🔐 Chiave inviata. In attesa del peer…', 'me');
+    } catch (err) {
+      console.error('Errore start session:', err);
+      alert('Errore nell’avvio della sessione');
+    }
+  });
+
+  async function startSessionIfReady(){
+    if (sessionStarted) return;
+    await ensureKeys();
+    const myRaw = (els.myPub?.value || '').trim();
+    const peerRaw = (pendingPeerKey || els.peerPub?.value || '').trim();
+    if (!myRaw || !peerRaw) return;
+
+    await e2e.setPeerPublicKey(peerRaw);         // E2E pronto
+    e2e.peerPubRawB64=peerRaw;
+
+    if (ws&&ws.readyState===1){
+      ws.send(JSON.stringify({type:'key',raw:myPubExpected||(els.myPub?.value||'')}));
+    }
+
+    if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
+
+    // chiudi la tendina "Scambio di chiavi"
+    const details = document.querySelector('details');
+    if (details) details.open = false;
+    sessionStarted = true;
   }
 
-  function hideRecBadge() {
-    clearInterval(countdownInterval);
-    countdownInterval = null;
-    if (recBadge) recBadge.style.display = 'none';
-  }
+  // ===== Invio messaggi =====
+  els.sendBtn?.addEventListener('click', async ()=>{
+    try{
+      const text = els.input?.value || '';
+      if (!text.trim()) return;
+      if (!e2e.ready) return alert('Sessione E2E non attiva');
 
-  function pickBestAudioMime(){
-    const c=['audio/webm;codecs=opus','audio/webm','audio/mp4'];
-    for (const m of c){ try{ if(MediaRecorder.isTypeSupported(m)) return m;}catch{} }
-    return 'audio/webm;codecs=opus';
-  }
+      const { iv, ct } = await e2e.encrypt(text);
+      ws?.readyState===1 && ws.send(JSON.stringify({ type:'msg', iv, ct }));
+      addMsg(text, 'me');
+      els.input.value = '';
+    }catch(e){ console.error(e); }
+  });
 
-  async function ensureAudioControls(){
-    if (!els.composer||document.getElementById('recBtn')) return;
+  els.clearBtn?.addEventListener('click', ()=>{
+    els.log.innerHTML = '';
+  });
 
-    const recBtn=document.createElement('button');
-    recBtn.id='recBtn'; recBtn.textContent='Rec'; recBtn.style.marginLeft='6px';
+  // ===== Foto =====
+  function ensurePhotoControls(){
+    if (!els.video || !els.canvas || !els.snapBtn || !els.clearPhoto || !els.photoBtn) return;
 
-    const stopBtn=document.createElement('button');
-    stopBtn.id='stopBtn'; stopBtn.textContent='Stop'; stopBtn.style.marginLeft='6px'; stopBtn.disabled=true;
-
-    els.composer.appendChild(recBtn);
-    els.composer.appendChild(stopBtn);
-
-    recBtn.addEventListener('click',async ()=>{
-      if (!isConnected||!e2e.ready) return alert('Non connesso o E2E non pronto');
+    els.photoBtn.addEventListener('click', async ()=>{
       try{
-        // reset/stream
-        mediaStream?.getTracks().forEach(t=>t.stop());
-        mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
-        audioChunks=[]; audioMime=pickBestAudioMime();
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        els.video.srcObject = stream;
+        els.video.play();
+      }catch(e){ alert('Errore video: '+e.message); }
+    });
 
-        try{
-          mediaRecorder=new MediaRecorder(mediaStream,{mimeType:audioMime,audioBitsPerSecond:24000});
-        }catch{
-          mediaRecorder=new MediaRecorder(mediaStream);
-        }
+    els.snapBtn.addEventListener('click', async ()=>{
+      try{
+        const ctx = els.canvas.getContext('2d');
+        els.canvas.width = els.video.videoWidth;
+        els.canvas.height = els.video.videoHeight;
+        ctx.drawImage(els.video, 0, 0);
+        els.video.srcObject && els.video.srcObject.getTracks().forEach(t=>t.stop());
 
-        mediaRecorder.ondataavailable=(ev)=>{ if(ev.data?.size) audioChunks.push(ev.data); };
+        const blob = await new Promise(res => els.canvas.toBlob(res, 'image/jpeg', 0.85));
+        const { iv, ct } = await e2e.encryptBytes(await blob.arrayBuffer());
+        ws?.readyState===1 && ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg' }));
+        addImage(URL.createObjectURL(blob), 'me');
+      }catch(e){ console.error(e); }
+    });
 
-        mediaRecorder.onstop=async ()=>{
-          clearTimeout(audioTimer);
-          hideRecBadge();
+    els.clearPhoto.addEventListener('click', ()=>{
+      els.canvas.width = 0;
+      els.canvas.height = 0;
+      if (els.video.srcObject) {
+        els.video.srcObject.getTracks().forEach(t=>t.stop());
+        els.video.srcObject = null;
+      }
+    });
+  }
+
+  // ===== Audio =====
+  let mediaRecorder = null;
+  let audioTimer = null;
+
+  function showRecBadge(sec){
+    if (!els.timerBadge) return;
+    els.timerBadge.textContent = `${sec}s`;
+    els.timerBadge.style.display = sec > 0 ? 'inline-flex' : 'none';
+  }
+
+  function ensureAudioControls(){
+    if (!els.recBtn || !els.stopBtn) return;
+    const recBtn = els.recBtn;
+    const stopBtn = els.stopBtn;
+
+    recBtn.addEventListener('click', async ()=>{
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+        const chunks = [];
+        mediaRecorder.ondataavailable = e => { if (e.data && e.data.size>0) chunks.push(e.data); };
+
+        mediaRecorder.onstop = async () => {
           try{
-            const blob=new Blob(audioChunks,{type:audioMime.split(';')[0]});
-            addAudio(URL.createObjectURL(blob),'me',audioMime);
-
-            const b64=await blobToBase64(blob);
-            if (b64.length>MAX_B64_SAFE){ addMsg('⚠️ Audio troppo lungo per invio sicuro.','me'); return; }
-
-            const {iv,ct}=await e2e.encrypt(b64);
-            if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'audio',iv,ct,mime:audioMime}));
-          } catch (err) {
-            alert('Errore invio audio: '+(err?.message||err));
-          } finally {
-            // ripristina UI e risorse
-            mediaStream?.getTracks().forEach(t=>t.stop());
-            mediaStream=null; mediaRecorder=null; audioChunks=[];
-            recBtn.disabled=false; stopBtn.disabled=true;
-            // reset stile Rec
+            const blob = new Blob(chunks, { type:'audio/webm' });
+            const ab = await blob.arrayBuffer();
+            const { iv, ct } = await e2e.encryptBytes(ab);
+            ws?.readyState===1 && ws.send(JSON.stringify({ type:'audio', iv, ct, mime:'audio/webm' }));
+            addAudio(URL.createObjectURL(blob), 'me', 'audio/webm');
+          }catch(err){ console.error(err); }
+          finally{
+            stream.getTracks().forEach(t=>t.stop());
+            mediaRecorder = null;
+            clearInterval(audioTimer);
+            showRecBadge(0);
             recBtn.style.backgroundColor = '';
             recBtn.style.color = '';
           }
@@ -573,13 +328,11 @@ window.addEventListener('DOMContentLoaded', () => {
         audioTimer=setTimeout(()=>{
           if(mediaRecorder&&mediaRecorder.state!=='inactive'){
             mediaRecorder.stop();
-            addMsg('⏱️ Registrazione interrotta: 60s.','me');
           }
-        },60*1000);
-
-        recBtn.disabled=true; stopBtn.disabled=false;
+        }, 60_000);
 
       }catch(e){
+        console.error(e);
         alert('Errore microfono: '+e.message);
       }
     });
@@ -591,6 +344,110 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ===== WebSocket + Presenza =====
+  function connect(){
+    if (isConnecting||isConnected) return;
+    isConnecting=true; setConnState(false);
+    try{ ws=new WebSocket(FORCED_WS);}catch(e){ isConnecting=false; return;}
+    ws.addEventListener('error', ()=> { setConnState(false); setPeerPresence(false); });
+    ws.addEventListener('open',async ()=>{
+      isConnecting=false;
+      setConnState(true);
+      setPeerPresence(false);
+      backoffMs=2000;
+      await ensureKeys();
+    });
+    ws.addEventListener('close',()=>{
+      isConnecting=false;
+      setConnState(false);
+      setPeerPresence(false);
+      const jitter = Math.floor(Math.random()*500);
+      backoffMs=Math.min(backoffMs*2,15000);
+      setTimeout(connect, backoffMs + jitter);
+    });
+    ws.addEventListener('message',async ev=>{
+      try{
+        const msg=JSON.parse(ev.data);
+
+        // --- PRESENCE / HEARTBEAT dal backend ---
+        if (msg.type === 'joined') { myId = msg.id; return; }
+        if (msg.type === 'presence' && Array.isArray(msg.members)) {
+          members = new Map(msg.members.map(m => [m.id, m]));
+          updatePeerFromMembers();
+          return;
+        }
+        if (msg.type === 'join' && msg.id) {
+          members.set(msg.id, { joinedAt: Date.now() });
+          updatePeerFromMembers();
+          return;
+        }
+        if (msg.type === 'leave' && msg.id) {
+          members.delete(msg.id);
+          updatePeerFromMembers();
+          return;
+        }
+        if (msg.type === 'ping') {
+          ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+          return;
+        }
+        if (msg.type === 'pong') { touchPeerSeen(); return; }
+
+        if (msg.type==='key'){
+          await ensureKeys();
+          const peerRaw=(msg.raw||'').trim();
+          if (!peerRaw||peerRaw===(myPubExpected||els.myPub?.value||'').trim()) return;
+          if (!sessionStarted){ pendingPeerKey=peerRaw; await startSessionIfReady(); return; }
+          await e2e.setPeerPublicKey(peerRaw); e2e.peerPubRawB64=peerRaw;
+          if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
+          return;
+        }
+        if (!e2e.ready) return;
+        if (msg.type==='msg'){ touchPeerSeen(); addMsg(await e2e.decrypt(msg.iv,msg.ct),'peer'); return;}
+        if (msg.type==='image'){
+          touchPeerSeen();
+          const ab=await e2e.decryptToArrayBuffer(msg.iv,msg.ct);
+          addImage(URL.createObjectURL(new Blob([ab],{type:(msg.mime||'image/jpeg')})),'peer');
+          return;
+        }
+        if (msg.type==='audio'){
+          touchPeerSeen();
+          const ab=await e2e.decryptToArrayBuffer(msg.iv,msg.ct);
+          addAudio(URL.createObjectURL(new Blob([ab],{type:(msg.mime||'audio/webm')})),'peer',msg.mime||'audio/webm');
+          return;
+        }
+      }catch(e){ console.error(e); }
+    });
+  }
+
+  // ===== Clipboard helpers =====
+  els.myPub?.addEventListener('focus', (e)=> e.target.select());
+  els.myPub?.addEventListener('click', (e)=> e.target.select());
+  els.peerPub?.addEventListener('focus', (e)=> e.target.select());
+
+  // Copia chiave nei campi
+  document.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-copy]');
+    if (!btn) return;
+    const srcSel = btn.getAttribute('data-copy');
+    const src = document.querySelector(srcSel);
+    if (!src) return;
+
+    try {
+      await navigator.clipboard.writeText(src.value || src.textContent || '');
+      if (els.connTitle) {
+        els.connTitle.style.color = '#16a34a';
+        setTimeout(() => setConnState(isConnected), 1200);
+      }
+    } catch (e) {
+      alert('Impossibile copiare: ' + e.message);
+    }
+  });
+
   // ===== AutoStart =====
-  (async function autoStart(){ await ensureKeys(); connect(); ensurePhotoControls(); ensureAudioControls(); })();
+  (async function autoStart(){
+    await ensureKeys();
+    connect();
+    ensurePhotoControls();
+    ensureAudioControls();
+  })();
 });
