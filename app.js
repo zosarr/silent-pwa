@@ -13,6 +13,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let ws = null;
   let e2e = new E2E();
   let isConnecting = false;
+  // Readiness flags must be defined early
   let isConnected = false;
   let reconnectTimer = null;
   let backoffMs = 2000;
@@ -43,8 +44,6 @@ window.addEventListener('DOMContentLoaded', () => {
     composer:    document.querySelector('.composer'),
   };
   // === Session readiness tracking ===
-  let readySent = false;
-  let havePeerKey = false;
   function maybeSendReady(){
     try {
       if (sessionStarted && havePeerKey && !readySent && ws && ws.readyState === WebSocket.OPEN){
