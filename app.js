@@ -59,7 +59,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   function updatePeerBadge(n){
     if (!presenceBadge) return;
-    presenceBadge.textContent = (typeof n === 'number') ? `Peers: ${n}` : '';
+    presenceBadge.textContent = (typeof n === 'number') ? `utenti connessi: ${n}` : '';
     presenceBadge.style.display = (typeof n === 'number') ? 'inline-block' : 'none';
   }
 
@@ -251,7 +251,7 @@ window.addEventListener('DOMContentLoaded', () => {
         // respond to server keepalive
         if (msg.type==='ping'){ try{ ws?.send(JSON.stringify({type:'pong'})); }catch(e){} return; }
         // update presence from server
-        if (msg.type==='presence'){ if (typeof msg.peers==='number') updatePeerBadge(msg.peers); return; }
+        if (msg.type==='presence'){ if (typeof msg.utenti connessi==='number') updatePeerBadge(msg.utenti connessi); return; }
         
         if (msg.type==='key'){
           await ensureKeys();
