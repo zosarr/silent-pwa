@@ -5,9 +5,13 @@ import { applyLang } from './i18n.js';
 
 window.addEventListener('DOMContentLoaded', () => {
   // ===== Config =====
-  const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
   const qs = new URLSearchParams(location.search);
-  const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
+const room = qs.get('room') || 'test';
+const forced = qs.get('ws');
+// Build default WebSocket URL from current origin (works on localhost and production)
+const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+const AUTO_WS_URL = `${proto}://${location.host}/ws?room=${room}`;
+const FORCED_WS = forced || AUTO_WS_URL;
 
   // ===== Stato =====
   let ws = null;
@@ -23,10 +27,14 @@ window.addEventListener('DOMContentLoaded', () => {
   let keysGenerated = false;
   let myPubExpected = null;
 
-  let sessionStarted = false; try{ ws && ws.send(JSON.stringify({type:'not_ready'})); }catch(e){} readySent=false; havePeerKey=false;
+  let sessionStarted = false;
   let pendingPeerKey = null;
 
-  // ===== DOM =====
+  
+  // Readiness flags
+  let readySent = false;
+  let havePeerKey = false;
+// ===== DOM =====
   const $ = (s) => document.querySelector(s);
   const els = {
     langSel:     $('#langSelect'),
@@ -234,7 +242,7 @@ window.addEventListener('DOMContentLoaded', () => {
     isConnecting=true; setConnState(false);
     try{ ws=new WebSocket(FORCED_WS);}catch(e){ isConnecting=false; return;}
     ws.addEventListener('open',async ()=>{isConnecting=false; setConnState(true); backoffMs=2000; await ensureKeys();});
-    ws.addEventListener('close',()=>{ try{ ws && ws.send && ws.send(JSON.stringify({type:'not_ready'})); }catch(e){} readySent=false; havePeerKey=false;isConnecting=false; setConnState(false); sessionStarted=false; try{ ws && ws.send(JSON.stringify({type:'not_ready'})); }catch(e){} readySent=false; havePeerKey=false; pendingPeerKey=null; setTimeout(connect,backoffMs=Math.min(backoffMs*2,15000));});
+    ws.addEventListener('close',()=>{ try{ ws && ws.send && ws.send(JSON.stringify({type:'not_ready'})); }catch(e){} readySent=false; havePeerKey=false;isConnecting=false; setConnState(false); sessionStarted=false;
     ws.addEventListener('message',async ev=>{
       try{
         const msg=JSON.parse(ev.data);
