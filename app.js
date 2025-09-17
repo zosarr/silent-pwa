@@ -1,3 +1,6 @@
+// app.js — Silent PWA (testo, foto, audio E2E)
+
+// === Imports originali ===
 import { E2E } from './crypto.js';
 import { applyLang } from './i18n.js';
 
@@ -46,7 +49,7 @@ window.addEventListener('DOMContentLoaded', () => {
     composer:    document.querySelector('.composer'),
   };
 
-  // ===== Utils =====
+  // ===== Utils testo & media =====
   const escapeHtml = (s) => (s ? s.replace(/[&<>"']/g, m => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[m])) : '');
@@ -60,6 +63,7 @@ window.addEventListener('DOMContentLoaded', () => {
     els.log.scrollTop = els.log.scrollHeight;
     setTimeout(() => li.remove(), 5 * 60 * 1000); // autodistruzione dopo 5 min
   }
+
   function addImage(url, who='peer'){
     if (!els.log) return;
     const li = document.createElement('li');
@@ -73,6 +77,26 @@ window.addEventListener('DOMContentLoaded', () => {
     els.log.appendChild(li);
     els.log.scrollTop = els.log.scrollHeight;
     setTimeout(()=>{ URL.revokeObjectURL(url); li.remove(); }, 5*60*1000);
+  }
+
+  // === Player audio in chat (NUOVO) ===
+  function addAudio(url, who='peer', mime='audio/webm') {
+    if (!els.log) return;
+    const li = document.createElement('li');
+    li.className = who;
+
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.src = url;
+    audio.type = mime;
+    audio.style.maxWidth = '70%';
+    audio.style.display = 'block';
+
+    li.appendChild(audio);
+    els.log.appendChild(li);
+    els.log.scrollTop = els.log.scrollHeight;
+
+    setTimeout(() => { URL.revokeObjectURL(url); li.remove(); }, 5 * 60 * 1000);
   }
 
   // === Helper immagine / Base64 (robusti su smartphone) ===
@@ -103,27 +127,28 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-  // Converte un Blob in base64 in modo sicuro (niente stack overflow)
+  // Converte un Blob in base64 (usato anche per audio)
   function blobToBase64(blob){
     return new Promise((resolve, reject)=>{
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = reader.result || '';
-        const b64 = String(dataUrl).split(',')[1] || ''; // rimuove "data:...;base64,"
+        const b64 = String(dataUrl).split(',')[1] || ''; // rimuove "data:.base64,"
         resolve(b64);
       };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
   }
-  // Base64 -> ArrayBuffer per ricostruire il Blob in ricezione
+  // Base64 -> ArrayBuffer per ricostruire un Blob (immagini/audio in ricezione)
   function b64ToAb(b64){
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
     for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
     return bytes.buffer;
   }
-  // Ridimensiona/ricomprime più aggressivo per mobile (budget più basso)
+
+  // Ridimensiona/ricomprime aggressivo per mobile (foto)
   async function adaptAndEncodeImage(originalImg){
     const targets = [
       {max: 960, q: 0.80},
@@ -166,8 +191,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (els.connTitle) {
       els.connTitle.textContent = `: ${txt}`;
       els.connTitle.style.color = color;
-     els.connTitle.style.fontWeight = '700';
-   }
+      els.connTitle.style.fontWeight = '700';
+    }
     if (els.connStatus) {
       els.connStatus.textContent = connected ? 'Connesso' : 'Non connesso';
       els.connStatus.classList.toggle('connected', connected);
@@ -296,7 +321,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
           // Se il server ributta la TUA chiave, ignorala
           if (!peerRaw || peerRaw === myRaw) {
-            console.log('[E2E] ricevuta la mia chiave → ignoro');
+            console.log('[E3E] ricevuta la mia chiave → ignoro');
             return;
           }
 
@@ -331,13 +356,25 @@ window.addEventListener('DOMContentLoaded', () => {
         }
 
         if (msg.type === 'image') {
-          const b64 = await e2e.decrypt(msg.iv, msg.ct);               // base64 string
+          const b64 = await e2e.decrypt(msg.iv, msg.ct);               // base64 (jpeg)
           const buf = b64ToAb(b64);                                    // -> ArrayBuffer
           const blob = new Blob([buf], { type: msg.mime || 'image/jpeg' });
           const url = URL.createObjectURL(blob);
           addImage(url, 'peer');
           return;
         }
+
+        // === RICEZIONE AUDIO (NUOVO) ===
+        if (msg.type === 'audio') {
+          const b64  = await e2e.decrypt(msg.iv, msg.ct); // base64 audio
+          const buf  = b64ToAb(b64);
+          const mime = msg.mime || 'audio/webm';
+          const blob = new Blob([buf], { type: mime });
+          const url  = URL.createObjectURL(blob);
+          addAudio(url, 'peer', mime);
+          return;
+        }
+
       } catch (e) {
         console.error('[WS] message error:', e);
       }
@@ -348,14 +385,6 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(() => {
     try { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'ping', t: Date.now() })); } catch {}
   }, 25000);
-
-  // auto start
-  (async function autoStart() {
-    await ensureKeys();
-    connect();
-    // crea i controlli foto (accanto a "Invia") solo a pagina pronta
-    ensurePhotoControls();
-  })();
 
   // ===== Avvia Sessione =====
   els.startBtn && els.startBtn.addEventListener('click', async (e) => {
@@ -451,45 +480,41 @@ window.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(cameraInput);
     document.body.appendChild(galleryInput);
 
-     // --- Mini-menu Scatta / Galleria ---
-els.composer.style.position = 'relative'; // per posizionare il menu
+    // --- Mini-menu Scatta / Galleria ---
+    els.composer.style.position = 'relative'; // per posizionare il menu
 
-const menu = document.createElement('div');
-menu.className = 'photo-menu hidden';
-menu.innerHTML = `
-  <button type="button" data-act="camera">Scatta</button>
-  <button type="button" data-act="gallery">Galleria</button>
-`;
-els.composer.appendChild(menu);
+    const menu = document.createElement('div');
+    menu.className = 'photo-menu hidden';
+    menu.innerHTML = `
+      <button type="button" data-act="camera">Scatta</button>
+      <button type="button" data-act="gallery">Galleria</button>
+    `;
+    els.composer.appendChild(menu);
 
-photoBtn.addEventListener('click', (e)=>{
-  e.preventDefault();
+    photoBtn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      // mostra il menu centrato
+      menu.classList.remove('hidden');
+      menu.style.left = '50%';
+      menu.style.top = '50%';
+      menu.style.transform = 'translate(-50%, -50%)';
+    });
 
-  // mostra il menu centrato
-menu.classList.remove('hidden');
-menu.style.left = '50%';
-menu.style.top = '50%';
-menu.style.transform = 'translate(-50%, -50%)';
+    // azioni menu
+    menu.addEventListener('click', (e)=>{
+      const act = e.target?.getAttribute('data-act');
+      if (act === 'camera') cameraInput.click();
+      if (act === 'gallery') galleryInput.click();
+      menu.classList.add('hidden');
+    });
 
- 
-});
+    // chiudi se clicchi fuori
+    document.addEventListener('click', (e)=>{
+      if (!menu.contains(e.target) && e.target !== photoBtn) {
+        menu.classList.add('hidden');
+      }
+    });
 
-// azioni menu
-menu.addEventListener('click', (e)=>{
-  const act = e.target?.getAttribute('data-act');
-  if (act === 'camera') cameraInput.click();
-  if (act === 'gallery') galleryInput.click();
-  menu.classList.add('hidden');
-});
-
-// chiudi se clicchi fuori
-document.addEventListener('click', (e)=>{
-  if (!menu.contains(e.target) && e.target !== photoBtn) {
-    menu.classList.add('hidden');
-  }
-});
-
-    
     cameraInput.addEventListener('change', ()=> handleFile(cameraInput.files && cameraInput.files[0]));
     galleryInput.addEventListener('change', ()=> handleFile(galleryInput.files && galleryInput.files[0]));
   }
@@ -529,8 +554,136 @@ document.addEventListener('click', (e)=>{
     }
   }
 
+  // ===== AUDIO: registra e invia (pulsanti Rec/Stop, limite 60s) — NUOVO =====
+  let mediaStream = null;
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let audioMime = 'audio/webm;codecs=opus';
+  let audioTimer = null; // timer limite
+
+  function pickBestAudioMime(){
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/mpeg'
+    ];
+    for (const c of candidates) {
+      try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c; } catch {}
+    }
+    return 'audio/webm;codecs=opus';
+  }
+
+  async function ensureAudioControls(){
+    if (!els.composer || document.getElementById('recBtn')) return;
+
+    const recBtn  = document.createElement('button');
+    recBtn.id = 'recBtn';
+    recBtn.textContent = 'Rec';
+    recBtn.title = 'Inizia registrazione';
+    recBtn.style.marginLeft = '6px';
+
+    const stopBtn = document.createElement('button');
+    stopBtn.id = 'stopBtn';
+    stopBtn.textContent = 'Stop';
+    stopBtn.title = 'Ferma e invia';
+    stopBtn.style.marginLeft = '6px';
+    stopBtn.disabled = true;
+
+    els.composer.appendChild(recBtn);
+    els.composer.appendChild(stopBtn);
+
+    recBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!isConnected) return alert('Non connesso');
+      if (!e2e.ready)   return alert('Scambio chiavi incompleto: premi "Avvia sessione".');
+
+      try {
+        // prepara stream e recorder
+        mediaStream?.getTracks()?.forEach(t => t.stop());
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        audioMime = pickBestAudioMime();
+        mediaRecorder = new MediaRecorder(mediaStream, { mimeType: audioMime });
+
+        mediaRecorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) audioChunks.push(ev.data); };
+
+        mediaRecorder.onstop = async () => {
+          clearTimeout(audioTimer);   // ferma timer
+          audioTimer = null;
+
+          try {
+            const blob = new Blob(audioChunks, { type: audioMime.split(';')[0] });
+            // preview locale subito
+            const localUrl = URL.createObjectURL(blob);
+            addAudio(localUrl, 'me', audioMime);
+
+            // invio (base64 cifrato E2E)
+            const b64 = await blobToBase64(blob);
+            const { iv, ct } = await e2e.encrypt(b64);
+            if (ws && ws.readyState === 1) {
+              ws.send(JSON.stringify({ type:'audio', iv, ct, mime: audioMime }));
+            }
+          } catch (err) {
+            console.error('Errore invio audio:', err);
+            alert('Errore invio audio: ' + (err && err.message ? err.message : err));
+          } finally {
+            // chiudi lo stream microfono
+            try { mediaStream?.getTracks()?.forEach(t => t.stop()); } catch {}
+            mediaStream = null;
+            mediaRecorder = null;
+            audioChunks = [];
+            recBtn.disabled  = false;
+            stopBtn.disabled = true;
+          }
+        };
+
+        mediaRecorder.start(); // nessun timeslice: invia tutto alla fine
+
+        // attiva timer 60s (stop automatico + invio)
+        audioTimer = setTimeout(() => {
+          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+            alert('Registrazione interrotta: limite 60s raggiunto');
+          }
+        }, 60 * 1000);
+
+        recBtn.disabled  = true;
+        stopBtn.disabled = false;
+      } catch (err) {
+        console.error('Errore Rec:', err);
+        alert('Permesso microfono negato o non disponibile.');
+        try { mediaStream?.getTracks()?.forEach(t => t.stop()); } catch {}
+        mediaStream = null;
+        mediaRecorder = null;
+        audioChunks = [];
+        recBtn.disabled  = false;
+        stopBtn.disabled = true;
+      }
+    });
+
+    stopBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      try {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop(); // scatena onstop => cifra + invia
+        }
+      } catch {}
+    });
+  }
+
   // ===== Riconnessione quando torni in foreground =====
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && (!ws || ws.readyState !== 1)) connect();
   });
+
+  // ===== AUTO START =====
+  (async function autoStart() {
+    await ensureKeys();
+    connect();
+    // crea i controlli foto & audio (accanto a "Invia") solo a pagina pronta
+    ensurePhotoControls();   // originale
+    ensureAudioControls();   // NUOVO
+  })();
+
 });
