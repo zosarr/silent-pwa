@@ -1,4 +1,4 @@
-// app.js — Silent PWA (testo, foto, audio, presenza peer E2E)
+// app.js — Silent PWA (testo, foto, audio, presenza peer + diagnostica E2E/WS)
 
 import { E2E } from './crypto.js';
 import { applyLang } from './i18n.js';
@@ -25,10 +25,10 @@ window.addEventListener('DOMContentLoaded', () => {
   let pendingPeerKey = null;
 
   // ===== Presenza (peer) =====
-  let peerLastSeen = 0;           // ms epoch dell’ultimo segno di vita dal peer
+  let peerLastSeen = 0;
   let peerOnline = false;
-  let presenceSendInterval = null; // timer che invia presence
-  let peerCheckInterval = null;    // timer che valuta online/offline
+  let presenceSendInterval = null;
+  let peerCheckInterval = null;
 
   // ===== DOM =====
   const $ = (s) => document.querySelector(s);
@@ -36,8 +36,8 @@ window.addEventListener('DOMContentLoaded', () => {
     langSel:     $('#langSelect'),
     installBtn:  $('#installBtn'),
     clearBtn:    $('#clearBtn'),
-    connTitle:   document.querySelector('[data-i18n="connection"]'),
-    connStatus:  $('#connStatus'),
+    connTitle:   document.querySelector('[data-i18n="connection"]'), // es. "Connessione"
+    connStatus:  $('#connStatus'), // badge testuale
     myPub:       $('#myPub'),
     copyMyBtn:   $('#copyMyPubBtn'),
     peerPub:     $('#peerPub'),
@@ -47,6 +47,34 @@ window.addEventListener('DOMContentLoaded', () => {
     sendBtn:     $('#sendBtn'),
     composer:    document.querySelector('.composer'),
   };
+
+  // ===== Banner diagnostica =====
+  function ensureBanner() {
+    let b = document.getElementById('appBanner');
+    if (b) return b;
+    b = document.createElement('div');
+    b.id = 'appBanner';
+    b.style.position = 'fixed';
+    b.style.left = '0';
+    b.style.right = '0';
+    b.style.top = '0';
+    b.style.zIndex = '99999';
+    b.style.display = 'none';
+    b.style.padding = '10px 14px';
+    b.style.fontWeight = '600';
+    b.style.textAlign = 'center';
+    document.body.appendChild(b);
+    return b;
+  }
+  function showBanner(msg, type='info', timeoutMs=4000) {
+    const b = ensureBanner();
+    b.textContent = msg;
+    b.style.display = 'block';
+    b.style.background = type === 'error' ? '#dc2626' : (type === 'warn' ? '#f59e0b' : '#16a34a');
+    b.style.color = '#fff';
+    if (timeoutMs) setTimeout(() => { b.style.display = 'none'; }, timeoutMs);
+  }
+  function hideBanner(){ const b=ensureBanner(); b.style.display='none'; }
 
   // ===== Utils =====
   const escapeHtml = (s) => (s ? s.replace(/[&<>"']/g, m => ({
@@ -157,7 +185,11 @@ window.addEventListener('DOMContentLoaded', () => {
   // ===== I18N & SW =====
   els.langSel && els.langSel.addEventListener('change', ()=>applyLang(els.langSel.value));
   applyLang('it');
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(err=>{
+      console.warn('[SW] register error', err);
+    });
+  }
 
   // ===== Stato Connessione (server) =====
   function setConnState(connected){
@@ -173,7 +205,6 @@ window.addEventListener('DOMContentLoaded', () => {
       els.connStatus.classList.toggle('connected',connected);
       els.connStatus.classList.toggle('disconnected',!connected);
     }
-    // se perdiamo il server, il peer è certamente "offline" per noi
     if (!connected) setPeerState(false);
   }
   setConnState(false);
@@ -217,16 +248,27 @@ window.addEventListener('DOMContentLoaded', () => {
   // ===== E2E =====
   async function ensureKeys(){
     if (keysGenerated) return;
-    if (!e2e.myPubRaw){
-      const pub=await e2e.init();
-      myPubExpected=pub;
-      if (els.myPub) els.myPub.value=pub;
-      if (els.myPub){
-        els.myPub.readOnly=true;
-        els.myPub.addEventListener('input',()=>{ if(myPubExpected&&els.myPub.value!==myPubExpected) els.myPub.value=myPubExpected; });
+    try {
+      if (!e2e.myPubRaw){
+        // Verifica contesto sicuro per WebCrypto
+        const isSecure = window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        if (!isSecure) {
+          showBanner('E2E richiede HTTPS o localhost (WebCrypto). Apri la PWA in https:// o su localhost.', 'error', 6000);
+        }
+        const pub=await e2e.init();
+        myPubExpected=pub;
+        if (els.myPub) els.myPub.value=pub;
+        if (els.myPub){
+          els.myPub.readOnly=true;
+          els.myPub.addEventListener('input',()=>{ if(myPubExpected&&els.myPub.value!==myPubExpected) els.myPub.value=myPubExpected; });
+        }
+        keysGenerated=true;
       }
+    } catch (err) {
+      console.error('[E2E] init error:', err);
+      showBanner('Errore inizializzazione E2E (chiavi). Serve HTTPS/localhost. Dettagli in console.', 'error', 7000);
+      // non rilancio: lascio l’app viva per altre funzioni (es. UI)
     }
-    keysGenerated=true;
   }
 
   // Copia chiave – mostra ✔ e poi ripristina stato
@@ -247,25 +289,21 @@ window.addEventListener('DOMContentLoaded', () => {
   async function sendPresence(){
     if (!ws || ws.readyState !== 1) return;
     try{
-      // messaggio leggerissimo, cifrato se E2E pronta
       if (e2e.ready) {
         const { iv, ct } = await e2e.encrypt('alive');
         ws.send(JSON.stringify({ type:'presence', iv, ct }));
       } else {
         ws.send(JSON.stringify({ type:'presence' }));
       }
-    }catch(e){ /* ignora */ }
+    }catch(e){ /* ignore */ }
   }
   function startPresenceLoops(){
-    stopPresenceLoops(); // evita doppioni
-    // invia presence ogni 10s
+    stopPresenceLoops();
     presenceSendInterval = setInterval(sendPresence, 10_000);
-    // controlla se il peer è “vivo” ogni 3s (timeout 15s)
     peerCheckInterval = setInterval(()=>{
       const alive = (Date.now() - peerLastSeen) < 15_000;
       setPeerState(alive);
     }, 3000);
-    // invia subito un primo presence
     sendPresence();
   }
   function stopPresenceLoops(){
@@ -275,29 +313,83 @@ window.addEventListener('DOMContentLoaded', () => {
     peerCheckInterval = null;
   }
 
+  // ===== Motivi umani per errore WS =====
+  function humanCloseReason(ev) {
+    try {
+      if (location.protocol === 'https:' && FORCED_WS.startsWith('ws://')) {
+        return 'Mixed Content: pagina HTTPS ma WS è ws:// — usa wss://';
+      }
+      if (ev && typeof ev.code === 'number') {
+        if (ev.code === 1006) return 'Handshake/TLS/Server irraggiungibile';
+        if (ev.code === 1000) return 'Chiusura normale';
+        if (ev.code === 1001) return 'Server riavviato o pagina cambiata';
+      }
+    } catch {}
+    return (ev && ev.reason) || 'Errore rete/WS';
+  }
+
   // ===== WebSocket =====
   function connect(){
     if (isConnecting||isConnected) return;
     isConnecting=true; setConnState(false);
-    try{ ws=new WebSocket(FORCED_WS);}catch(e){ isConnecting=false; return;}
-    ws.addEventListener('open',async ()=>{isConnecting=false; setConnState(true); backoffMs=2000; await ensureKeys();});
-    ws.addEventListener('close',()=>{isConnecting=false; setConnState(false); sessionStarted=false; pendingPeerKey=null; stopPresenceLoops(); setPeerState(false); setTimeout(connect,backoffMs=Math.min(backoffMs*2,15000));});
+
+    // Avviso se mixed content noto
+    if (location.protocol === 'https:' && FORCED_WS.startsWith('ws://')) {
+      showBanner('WS non sicuro su pagina HTTPS. Imposta ?ws=wss://… oppure usa HTTPS sul backend.', 'error', 7000);
+    }
+
+    try{
+      console.log('[WS] connecting to:', FORCED_WS);
+      ws=new WebSocket(FORCED_WS);
+    }catch(e){
+      isConnecting=false;
+      showBanner('Errore apertura WS (constructor). Vedi console.', 'error', 6000);
+      console.error('[WS] constructor error:', e);
+      return;
+    }
+
+    ws.addEventListener('open',async ()=>{
+      isConnecting=false; setConnState(true); backoffMs=2000;
+      showBanner('Connesso al server.', 'info', 1500);
+      await ensureKeys();
+    });
+
+    ws.addEventListener('error',(ev)=>{
+      console.error('[WS] error', ev);
+      showBanner('Errore WebSocket (vedi console).', 'error', 4000);
+    });
+
+    ws.addEventListener('close',(ev)=>{
+      console.warn('[WS] close', ev.code, ev.reason);
+      isConnecting=false; setConnState(false);
+      sessionStarted=false; pendingPeerKey=null;
+      stopPresenceLoops(); setPeerState(false);
+      const why = humanCloseReason(ev);
+      showBanner(`WS chiuso: ${why}`, 'warn', 5000);
+      setTimeout(connect, backoffMs = Math.min(backoffMs*2, 15000));
+    });
+
     ws.addEventListener('message',async ev=>{
       try{
         const msg=JSON.parse(ev.data);
         if (msg.type==='key'){
           await ensureKeys();
           const peerRaw=(msg.raw||'').trim();
-          if (!peerRaw||peerRaw===(myPubExpected||els.myPub?.value||'').trim()) return;
+          const myRaw=(myPubExpected||els.myPub?.value||'').trim();
+          if (!peerRaw || peerRaw===myRaw) return;
           if (!sessionStarted){ pendingPeerKey=peerRaw; return;}
-          await e2e.setPeerPublicKey(peerRaw); e2e.peerPubRawB64=peerRaw;
-          if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
+          try{
+            await e2e.setPeerPublicKey(peerRaw);
+            e2e.peerPubRawB64=peerRaw;
+            if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
+          }catch(err){
+            console.error('setPeerPublicKey error:', err);
+            showBanner('Errore set peer key (vedi console).', 'error', 5000);
+          }
           return;
         }
 
-        // Presenza (può essere cifrata o plain)
         if (msg.type==='presence'){
-          // se cifrata e E2E pronta, decripta (contenuto non usato)
           try{ if (e2e.ready && msg.iv && msg.ct) await e2e.decrypt(msg.iv, msg.ct); }catch{}
           peerLastSeen = Date.now();
           setPeerState(true);
@@ -333,7 +425,9 @@ window.addEventListener('DOMContentLoaded', () => {
           addAudio(URL.createObjectURL(blob),'peer',msg.mime); 
           return;
         }
-      }catch(e){console.error(e);}
+      }catch(e){
+        console.error('[WS] message error:', e);
+      }
     });
   }
 
@@ -346,7 +440,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!peerRaw) return alert('Incolla la chiave del peer o attendi.');
 
     try {
-      await e2e.setPeerPublicKey(peerRaw);         // E2E pronto
+      await e2e.setPeerPublicKey(peerRaw);
       e2e.peerPubRawB64=peerRaw;
 
       if (ws&&ws.readyState===1){
@@ -362,8 +456,10 @@ window.addEventListener('DOMContentLoaded', () => {
       // avvia heartbeat presenza
       startPresenceLoops();
 
+      showBanner('Sessione E2E avviata.', 'info', 2000);
     } catch (err) {
       console.error('Errore Avvia sessione:', err);
+      showBanner('Errore avvio sessione E2E (vedi console).', 'error', 5000);
       alert('Errore avvio sessione: ' + (err?.message || err));
     }
   });
@@ -375,6 +471,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const {iv,ct}=await e2e.encrypt(text);
     if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'msg',iv,ct}));
     addMsg(text,'me'); 
+    if (els.input) els.input.value='';
   });
   els.input && els.input.addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); els.sendBtn.click(); }});
   els.clearBtn && els.clearBtn.addEventListener('click',()=>{ if(els.log) els.log.innerHTML=''; });
@@ -584,7 +681,6 @@ window.addEventListener('DOMContentLoaded', () => {
     recBtn.addEventListener('click',async ()=>{
       if (!isConnected||!e2e.ready) return alert('Non connesso o E2E non pronto');
       try{
-        // reset/stream
         mediaStream?.getTracks().forEach(t=>t.stop());
         mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
         audioChunks=[]; audioMime=pickBestAudioMime();
@@ -612,25 +708,20 @@ window.addEventListener('DOMContentLoaded', () => {
           } catch (err) {
             alert('Errore invio audio: '+(err?.message||err));
           } finally {
-            // ripristina UI e risorse
             mediaStream?.getTracks().forEach(t=>t.stop());
             mediaStream=null; mediaRecorder=null; audioChunks=[];
             recBtn.disabled=false; stopBtn.disabled=true;
-            // reset stile Rec
             recBtn.style.backgroundColor = '';
             recBtn.style.color = '';
           }
         };
 
-        // start + timeslice 1s
         try{ mediaRecorder.start(1000);}catch{ mediaRecorder.start(); }
 
-        // Rec in rosso durante la registrazione + badge countdown
         recBtn.style.backgroundColor = 'red';
         recBtn.style.color = 'white';
         showRecBadge(60);
 
-        // limite 60s
         audioTimer=setTimeout(()=>{
           if(mediaRecorder&&mediaRecorder.state!=='inactive'){
             mediaRecorder.stop();
@@ -653,5 +744,10 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===== AutoStart =====
-  (async function autoStart(){ await ensureKeys(); connect(); ensurePhotoControls(); ensureAudioControls(); })();
+  (async function autoStart(){
+    await ensureKeys();          // genera e mostra chiavi (con diagnostica)
+    connect();                   // connessione WS (con motivi umani/bannder)
+    ensurePhotoControls();
+    ensureAudioControls();
+  })();
 });
