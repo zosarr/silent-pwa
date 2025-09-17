@@ -22,7 +22,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let keysGenerated = false;
   let myPubExpected = null;
 
-  let sessionStarted = false;
+  let sessionStarted = false; try{ ws && ws.send(JSON.stringify({type:'not_ready'})); }catch(e){} readySent=false; havePeerKey=false;
   let pendingPeerKey = null;
 
   // ===== DOM =====
@@ -42,25 +42,16 @@ window.addEventListener('DOMContentLoaded', () => {
     sendBtn:     $('#sendBtn'),
     composer:    document.querySelector('.composer'),
   };
-  // === Presence Badge (created dynamically) ===
-  const presenceBadge = (() => {
-    const badge = document.createElement('span');
-    badge.id = 'peerPresence';
-    badge.style.marginLeft = '8px';
-    badge.style.padding = '2px 6px';
-    badge.style.borderRadius = '12px';
-    badge.style.fontSize = '12px';
-    badge.style.background = '#eef2ff';
-    badge.style.color = '#1e40af';
-    badge.textContent = '';
-    (els.connStatus?.parentElement || document.body).appendChild(badge);
-    return badge;
-  })();
-
-  function updatePeerBadge(n){
-    if (!presenceBadge) return;
-    presenceBadge.textContent = (typeof n === 'number') ? `Peers: ${n}` : '';
-    presenceBadge.style.display = (typeof n === 'number') ? 'inline-block' : 'none';
+  // === Session readiness tracking ===
+  let readySent = false;
+  let havePeerKey = false;
+  function maybeSendReady(){
+    try {
+      if (sessionStarted && havePeerKey && !readySent && ws && ws.readyState === WebSocket.OPEN){
+        ws.send(JSON.stringify({type:'ready'}));
+        readySent = true;
+      }
+    } catch(e){}
   }
 
 
@@ -244,16 +235,12 @@ window.addEventListener('DOMContentLoaded', () => {
     isConnecting=true; setConnState(false);
     try{ ws=new WebSocket(FORCED_WS);}catch(e){ isConnecting=false; return;}
     ws.addEventListener('open',async ()=>{isConnecting=false; setConnState(true); backoffMs=2000; await ensureKeys();});
-    ws.addEventListener('close',()=>{ updatePeerBadge(null); isConnecting=false; setConnState(false); sessionStarted=false; pendingPeerKey=null; setTimeout(connect,backoffMs=Math.min(backoffMs*2,15000));});
+    ws.addEventListener('close',()=>{ try{ ws && ws.send && ws.send(JSON.stringify({type:'not_ready'})); }catch(e){} readySent=false; havePeerKey=false;isConnecting=false; setConnState(false); sessionStarted=false; try{ ws && ws.send(JSON.stringify({type:'not_ready'})); }catch(e){} readySent=false; havePeerKey=false; pendingPeerKey=null; setTimeout(connect,backoffMs=Math.min(backoffMs*2,15000));});
     ws.addEventListener('message',async ev=>{
       try{
         const msg=JSON.parse(ev.data);
-        // respond to server keepalive
-        if (msg.type==='ping'){ try{ ws?.send(JSON.stringify({type:'pong'})); }catch(e){} return; }
-        // update presence from server
-        if (msg.type==='presence'){ if (typeof msg.peers==='number') updatePeerBadge(msg.peers); return; }
-        
         if (msg.type==='key'){
+          havePeerKey = true; maybeSendReady();
           await ensureKeys();
           const peerRaw=(msg.raw||'').trim();
           if (!peerRaw||peerRaw===(myPubExpected||els.myPub?.value||'').trim()) return;
@@ -284,6 +271,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
       if (ws&&ws.readyState===1){
         ws.send(JSON.stringify({type:'key',raw:myPubExpected||(els.myPub?.value||'')}));
+          maybeSendReady();
       }
 
       if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
