@@ -245,9 +245,25 @@ window.addEventListener('DOMContentLoaded', () => {
     let peerRaw=(els.peerPub?.value||'').trim();
     if (!peerRaw&&pendingPeerKey) peerRaw=pendingPeerKey;
     if (!peerRaw) return alert('Incolla la chiave del peer o attendi.');
-    await e2e.setPeerPublicKey(peerRaw); e2e.peerPubRawB64=peerRaw;
-    if (ws&&ws.readyState===1){ ws.send(JSON.stringify({type:'key',raw:myPubExpected||(els.myPub?.value||'')}));}
-    if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
+
+    try {
+      await e2e.setPeerPublicKey(peerRaw);         // E2E pronto
+      e2e.peerPubRawB64=peerRaw;
+
+      if (ws&&ws.readyState===1){
+        ws.send(JSON.stringify({type:'key',raw:myPubExpected||(els.myPub?.value||'')}));
+      }
+
+      if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
+
+      // ⤵️ chiudi la tendina "Scambio di chiavi"
+      const details = document.querySelector('details');
+      if (details) details.open = false;
+
+    } catch (err) {
+      console.error('Errore Avvia sessione:', err);
+      alert('Errore avvio sessione: ' + (err?.message || err));
+    }
   });
 
   // ===== Invia testo =====
