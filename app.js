@@ -256,7 +256,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
       if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
 
-      // ⤵️ chiudi la tendina "Scambio di chiavi"
+      // chiudi la tendina "Scambio di chiavi"
       const details = document.querySelector('details');
       if (details) details.open = false;
 
@@ -300,6 +300,65 @@ window.addEventListener('DOMContentLoaded', () => {
   let mediaStream=null, mediaRecorder=null, audioChunks=[], audioMime='audio/webm;codecs=opus', audioTimer=null;
   const MAX_B64_SAFE=300_000;
 
+  // --- Badge countdown accanto a "Chat"
+  let recBadge = null;
+  let countdownInterval = null;
+  let remainingSec = 60;
+
+  function findChatTitleElement() {
+    // prova selettori comuni, poi cerca un heading che contenga "chat"
+    return (
+      document.querySelector('[data-i18n="chat"]') ||
+      document.querySelector('#chatTitle') ||
+      Array.from(document.querySelectorAll('h1,h2,h3,.title,.header'))
+        .find(el => (el.textContent || '').trim().toLowerCase().includes('chat'))
+    );
+  }
+
+  function ensureRecBadge() {
+    const target = findChatTitleElement();
+    if (!target) return null;
+    if (!recBadge) {
+      recBadge = document.createElement('span');
+      recBadge.id = 'recBadge';
+      recBadge.style.marginLeft = '8px';
+      recBadge.style.padding = '2px 8px';
+      recBadge.style.borderRadius = '999px';
+      recBadge.style.background = '#ef4444'; // rosso
+      recBadge.style.color = '#fff';
+      recBadge.style.fontSize = '0.85rem';
+      recBadge.style.fontWeight = '600';
+      recBadge.style.display = 'none';
+    }
+    if (!recBadge.parentElement) target.appendChild(recBadge);
+    return recBadge;
+  }
+
+  function showRecBadge(maxSec = 60) {
+    const badge = ensureRecBadge();
+    if (!badge) return;
+    clearInterval(countdownInterval);
+    remainingSec = maxSec;
+    badge.textContent = `🎙️ max rec ${maxSec} sec · ${remainingSec}`;
+    badge.style.display = 'inline-block';
+    countdownInterval = setInterval(() => {
+      remainingSec -= 1;
+      if (remainingSec <= 0) {
+        badge.textContent = `🎙️ max rec ${maxSec} sec · 0`;
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      } else {
+        badge.textContent = `🎙️ max rec ${maxSec} sec · ${remainingSec}`;
+      }
+    }, 1000);
+  }
+
+  function hideRecBadge() {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+    if (recBadge) recBadge.style.display = 'none';
+  }
+
   function pickBestAudioMime(){
     const c=['audio/webm;codecs=opus','audio/webm','audio/mp4'];
     for (const m of c){ try{ if(MediaRecorder.isTypeSupported(m)) return m;}catch{} }
@@ -336,6 +395,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
         mediaRecorder.onstop=async ()=>{
           clearTimeout(audioTimer);
+          hideRecBadge();
           try{
             const blob=new Blob(audioChunks,{type:audioMime.split(';')[0]});
             addAudio(URL.createObjectURL(blob),'me',audioMime);
@@ -352,7 +412,7 @@ window.addEventListener('DOMContentLoaded', () => {
             mediaStream?.getTracks().forEach(t=>t.stop());
             mediaStream=null; mediaRecorder=null; audioChunks=[];
             recBtn.disabled=false; stopBtn.disabled=true;
-            // 🔴 reset stile Rec
+            // reset stile Rec
             recBtn.style.backgroundColor = '';
             recBtn.style.color = '';
           }
@@ -361,9 +421,10 @@ window.addEventListener('DOMContentLoaded', () => {
         // start + timeslice 1s
         try{ mediaRecorder.start(1000);}catch{ mediaRecorder.start(); }
 
-        // 🔴 Rec in rosso durante la registrazione
+        // Rec in rosso durante la registrazione + badge countdown
         recBtn.style.backgroundColor = 'red';
         recBtn.style.color = 'white';
+        showRecBadge(60);
 
         // limite 60s
         audioTimer=setTimeout(()=>{
