@@ -196,8 +196,19 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     keysGenerated=true;
   }
-  els.copyMyBtn && els.copyMyBtn.addEventListener('click',async ()=>{
-    try{ await navigator.clipboard.writeText(els.myPub?.value||''); }catch(e){ alert('Impossibile copiare: '+e.message);}
+
+  // Copia chiave – mostra ✔ e poi ripristina stato
+  els.copyMyBtn && els.copyMyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(els.myPub?.value || '');
+      if (els.connTitle) {
+        els.connTitle.textContent = ': chiave copiata ✔';
+        els.connTitle.style.color = '#16a34a';
+        setTimeout(() => setConnState(isConnected), 1200);
+      }
+    } catch (e) {
+      alert('Impossibile copiare: ' + e.message);
+    }
   });
 
   // ===== WebSocket =====
@@ -272,45 +283,92 @@ window.addEventListener('DOMContentLoaded', () => {
   // ===== AUDIO =====
   let mediaStream=null, mediaRecorder=null, audioChunks=[], audioMime='audio/webm;codecs=opus', audioTimer=null;
   const MAX_B64_SAFE=300_000;
+
   function pickBestAudioMime(){
     const c=['audio/webm;codecs=opus','audio/webm','audio/mp4'];
     for (const m of c){ try{ if(MediaRecorder.isTypeSupported(m)) return m;}catch{} }
     return 'audio/webm;codecs=opus';
   }
+
   async function ensureAudioControls(){
     if (!els.composer||document.getElementById('recBtn')) return;
-    const recBtn=document.createElement('button'); recBtn.id='recBtn'; recBtn.textContent='Rec'; recBtn.style.marginLeft='6px';
-    const stopBtn=document.createElement('button'); stopBtn.id='stopBtn'; stopBtn.textContent='Stop'; stopBtn.style.marginLeft='6px'; stopBtn.disabled=true;
-    els.composer.appendChild(recBtn); els.composer.appendChild(stopBtn);
+
+    const recBtn=document.createElement('button');
+    recBtn.id='recBtn'; recBtn.textContent='Rec'; recBtn.style.marginLeft='6px';
+
+    const stopBtn=document.createElement('button');
+    stopBtn.id='stopBtn'; stopBtn.textContent='Stop'; stopBtn.style.marginLeft='6px'; stopBtn.disabled=true;
+
+    els.composer.appendChild(recBtn);
+    els.composer.appendChild(stopBtn);
+
     recBtn.addEventListener('click',async ()=>{
       if (!isConnected||!e2e.ready) return alert('Non connesso o E2E non pronto');
       try{
+        // reset/stream
         mediaStream?.getTracks().forEach(t=>t.stop());
         mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
         audioChunks=[]; audioMime=pickBestAudioMime();
-        try{ mediaRecorder=new MediaRecorder(mediaStream,{mimeType:audioMime,audioBitsPerSecond:24000}); }catch{ mediaRecorder=new MediaRecorder(mediaStream); }
+
+        try{
+          mediaRecorder=new MediaRecorder(mediaStream,{mimeType:audioMime,audioBitsPerSecond:24000});
+        }catch{
+          mediaRecorder=new MediaRecorder(mediaStream);
+        }
+
         mediaRecorder.ondataavailable=(ev)=>{ if(ev.data?.size) audioChunks.push(ev.data); };
+
         mediaRecorder.onstop=async ()=>{
           clearTimeout(audioTimer);
           try{
             const blob=new Blob(audioChunks,{type:audioMime.split(';')[0]});
             addAudio(URL.createObjectURL(blob),'me',audioMime);
+
             const b64=await blobToBase64(blob);
-            if (b64.length>MAX_B64_SAFE){ addMsg('⚠️ Audio troppo lungo per invio.','me'); return; }
+            if (b64.length>MAX_B64_SAFE){ addMsg('⚠️ Audio troppo lungo per invio sicuro.','me'); return; }
+
             const {iv,ct}=await e2e.encrypt(b64);
             if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'audio',iv,ct,mime:audioMime}));
-          }finally{
+          } catch (err) {
+            alert('Errore invio audio: '+(err?.message||err));
+          } finally {
+            // ripristina UI e risorse
             mediaStream?.getTracks().forEach(t=>t.stop());
             mediaStream=null; mediaRecorder=null; audioChunks=[];
             recBtn.disabled=false; stopBtn.disabled=true;
+            // 🔴 reset stile Rec
+            recBtn.style.backgroundColor = '';
+            recBtn.style.color = '';
           }
         };
+
+        // start + timeslice 1s
         try{ mediaRecorder.start(1000);}catch{ mediaRecorder.start(); }
-        audioTimer=setTimeout(()=>{ if(mediaRecorder&&mediaRecorder.state!=='inactive'){ mediaRecorder.stop(); addMsg('⏱️ Registrazione interrotta: 60s.','me'); }},60*1000);
+
+        // 🔴 Rec in rosso durante la registrazione
+        recBtn.style.backgroundColor = 'red';
+        recBtn.style.color = 'white';
+
+        // limite 60s
+        audioTimer=setTimeout(()=>{
+          if(mediaRecorder&&mediaRecorder.state!=='inactive'){
+            mediaRecorder.stop();
+            addMsg('⏱️ Registrazione interrotta: 60s.','me');
+          }
+        },60*1000);
+
         recBtn.disabled=true; stopBtn.disabled=false;
-      }catch(e){ alert('Errore microfono: '+e.message); }
+
+      }catch(e){
+        alert('Errore microfono: '+e.message);
+      }
     });
-    stopBtn.addEventListener('click',()=>{ if(mediaRecorder&&mediaRecorder.state!=='inactive') mediaRecorder.stop(); });
+
+    stopBtn.addEventListener('click',()=>{
+      if(mediaRecorder&&mediaRecorder.state!=='inactive'){
+        mediaRecorder.stop();
+      }
+    });
   }
 
   // ===== AutoStart =====
