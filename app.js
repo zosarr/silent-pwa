@@ -561,116 +561,139 @@ window.addEventListener('DOMContentLoaded', () => {
   let audioMime = 'audio/webm;codecs=opus';
   let audioTimer = null; // timer limite
 
-  function pickBestAudioMime(){
-    const candidates = [
-      'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/mp4',
-      'audio/mpeg'
-    ];
-    for (const c of candidates) {
-      try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c; } catch {}
-    }
-    return 'audio/webm;codecs=opus';
+  // ===== AUDIO: registra e invia (pulsanti Rec/Stop, limite 60s, 24kbps) =====
+let mediaStream = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let audioMime = 'audio/webm;codecs=opus';
+let audioTimer = null; // timer limite
+const MAX_B64_SAFE = 300_000; // ~225 KB; sopra questo rischi overflow nella cifratura/JSON
+
+function pickBestAudioMime(){
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',   // Safari
+  ];
+  for (const c of candidates) {
+    try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c; } catch {}
   }
+  return 'audio/webm;codecs=opus';
+}
 
-  async function ensureAudioControls(){
-    if (!els.composer || document.getElementById('recBtn')) return;
+async function ensureAudioControls(){
+  if (!els.composer || document.getElementById('recBtn')) return;
 
-    const recBtn  = document.createElement('button');
-    recBtn.id = 'recBtn';
-    recBtn.textContent = 'Rec';
-    recBtn.title = 'Inizia registrazione';
-    recBtn.style.marginLeft = '6px';
+  const recBtn  = document.createElement('button');
+  recBtn.id = 'recBtn';
+  recBtn.textContent = 'Rec';
+  recBtn.title = 'Inizia registrazione';
+  recBtn.style.marginLeft = '6px';
 
-    const stopBtn = document.createElement('button');
-    stopBtn.id = 'stopBtn';
-    stopBtn.textContent = 'Stop';
-    stopBtn.title = 'Ferma e invia';
-    stopBtn.style.marginLeft = '6px';
-    stopBtn.disabled = true;
+  const stopBtn = document.createElement('button');
+  stopBtn.id = 'stopBtn';
+  stopBtn.textContent = 'Stop';
+  stopBtn.title = 'Ferma e invia';
+  stopBtn.style.marginLeft = '6px';
+  stopBtn.disabled = true;
 
-    els.composer.appendChild(recBtn);
-    els.composer.appendChild(stopBtn);
+  els.composer.appendChild(recBtn);
+  els.composer.appendChild(stopBtn);
 
-    recBtn.addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (!isConnected) return alert('Non connesso');
-      if (!e2e.ready)   return alert('Scambio chiavi incompleto: premi "Avvia sessione".');
+  recBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!isConnected) return alert('Non connesso');
+    if (!e2e.ready)   return alert('Scambio chiavi incompleto: premi "Avvia sessione".');
 
-      try {
-        // prepara stream e recorder
-        mediaStream?.getTracks()?.forEach(t => t.stop());
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioChunks = [];
-        audioMime = pickBestAudioMime();
-        mediaRecorder = new MediaRecorder(mediaStream, { mimeType: audioMime });
+    try {
+      // prepara stream e recorder
+      mediaStream?.getTracks()?.forEach(t => t.stop());
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      audioMime = pickBestAudioMime();
 
-        mediaRecorder.ondataavailable = (ev) => { if (ev.data && ev.data.size) audioChunks.push(ev.data); };
+      // forza bitrate basso per tenere piccolo il file
+      const opts = { mimeType: audioMime, audioBitsPerSecond: 24_000 };
+      try { mediaRecorder = new MediaRecorder(mediaStream, opts); }
+      catch { mediaRecorder = new MediaRecorder(mediaStream); } // fallback se il browser non accetta opts
 
-        mediaRecorder.onstop = async () => {
-          clearTimeout(audioTimer);   // ferma timer
-          audioTimer = null;
+      mediaRecorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size) audioChunks.push(ev.data);
+      };
 
-          try {
-            const blob = new Blob(audioChunks, { type: audioMime.split(';')[0] });
-            // preview locale subito
-            const localUrl = URL.createObjectURL(blob);
-            addAudio(localUrl, 'me', audioMime);
+      mediaRecorder.onstop = async () => {
+        clearTimeout(audioTimer);   // ferma timer
+        audioTimer = null;
 
-            // invio (base64 cifrato E2E)
-            const b64 = await blobToBase64(blob);
-            const { iv, ct } = await e2e.encrypt(b64);
-            if (ws && ws.readyState === 1) {
-              ws.send(JSON.stringify({ type:'audio', iv, ct, mime: audioMime }));
-            }
-          } catch (err) {
-            console.error('Errore invio audio:', err);
-            alert('Errore invio audio: ' + (err && err.message ? err.message : err));
-          } finally {
-            // chiudi lo stream microfono
-            try { mediaStream?.getTracks()?.forEach(t => t.stop()); } catch {}
-            mediaStream = null;
-            mediaRecorder = null;
-            audioChunks = [];
-            recBtn.disabled  = false;
-            stopBtn.disabled = true;
+        try {
+          const blob = new Blob(audioChunks, { type: (audioMime.split(';')[0] || 'audio/webm') });
+
+          // anteprima locale
+          const localUrl = URL.createObjectURL(blob);
+          addAudio(localUrl, 'me', audioMime);
+
+          // converte in base64 (usa FileReader; è robusto con Blob piccoli/medi)
+          const b64 = await blobToBase64(blob);
+
+          // guard rail contro overflow in cifratura/JSON
+          if (b64.length > MAX_B64_SAFE) {
+            addMsg('⚠️ Audio troppo lungo per l’invio sicuro. Riprova più corto o a qualità inferiore.', 'me');
+            return;
           }
-        };
 
-        mediaRecorder.start(); // nessun timeslice: invia tutto alla fine
-
-        // attiva timer 60s (stop automatico + invio)
-        audioTimer = setTimeout(() => {
-          if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stop();
-            alert('Registrazione interrotta: limite 60s raggiunto');
+          // cifratura + invio
+          const { iv, ct } = await e2e.encrypt(b64);
+          if (ws && ws.readyState === 1) {
+            ws.send(JSON.stringify({ type:'audio', iv, ct, mime: audioMime }));
           }
-        }, 60 * 1000);
-
-        recBtn.disabled  = true;
-        stopBtn.disabled = false;
-      } catch (err) {
-        console.error('Errore Rec:', err);
-        alert('Permesso microfono negato o non disponibile.');
-        try { mediaStream?.getTracks()?.forEach(t => t.stop()); } catch {}
-        mediaStream = null;
-        mediaRecorder = null;
-        audioChunks = [];
-        recBtn.disabled  = false;
-        stopBtn.disabled = true;
-      }
-    });
-
-    stopBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      try {
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-          mediaRecorder.stop(); // scatena onstop => cifra + invia
+        } catch (err) {
+          console.error('Errore invio audio:', err);
+          alert('Errore invio audio: ' + (err && err.message ? err.message : err));
+        } finally {
+          try { mediaStream?.getTracks()?.forEach(t => t.stop()); } catch {}
+          mediaStream = null;
+          mediaRecorder = null;
+          audioChunks = [];
+          recBtn.disabled  = false;
+          stopBtn.disabled = true;
         }
-      } catch {}
-    });
-  }
+      };
+
+      // start con timeslice 1000ms per scaricare i chunk ogni secondo (meno memoria)
+      try { mediaRecorder.start(1000); } catch { mediaRecorder.start(); }
+
+      // timer 60s (stop automatico + invio)
+      audioTimer = setTimeout(() => {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+          addMsg('⏱️ Registrazione interrotta: limite 60s raggiunto.', 'me');
+        }
+      }, 60 * 1000);
+
+      recBtn.disabled  = true;
+      stopBtn.disabled = false;
+    } catch (err) {
+      console.error('Errore Rec:', err);
+      alert('Permesso microfono negato o non disponibile.');
+      try { mediaStream?.getTracks()?.forEach(t => t.stop()); } catch {}
+      mediaStream = null;
+      mediaRecorder = null;
+      audioChunks = [];
+      recBtn.disabled  = false;
+      stopBtn.disabled = true;
+    }
+  });
+
+  stopBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    try {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop(); // scatena onstop => cifra + invia
+      }
+    } catch {}
+  });
+}
+
 
   // ===== Riconnessione quando torni in foreground =====
   document.addEventListener('visibilitychange', () => {
