@@ -138,14 +138,20 @@ window.addEventListener('DOMContentLoaded', () => {
       {max:960,q:0.80},{max:720,q:0.76},{max:600,q:0.74},
       {max:480,q:0.72},{max:360,q:0.70},
     ];
+    // ~300k chars base64 ≈ ~225 KB reali → sicuro per cifratura/JSON
     const SAFE_B64_LEN = 300_000;
+
     let lastBlob=null,lastW=null,lastH=null,lastB64=null;
+
     for (const t of targets){
       const {blob,width,height} = await imageToJpegBlob(originalImg,{maxW:t.max,maxH:t.max,quality:t.q});
       const b64 = await blobToBase64(blob);
-      lastBlob=blob;lastW=width;lastH=height;lastB64=b64;
-      if (b64.length <= SAFE_B64_LEN) return {b64,width,height,blob};
+      lastBlob=blob; lastW=width; lastH=height; lastB64=b64;
+      if (b64.length <= SAFE_B64_LEN){
+        return { b64, width, height, blob };
+      }
     }
+    // Se nessun target rientra, restituisco l'ultimo provato; il chiamante farà un'ulteriore compressione aggressiva.
     return { b64:lastB64, width:lastW, height:lastH, blob:lastBlob };
   }
 
@@ -382,16 +388,54 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // === Guard-rail dimensione per immagini ===
+  const IMG_MAX_B64_SAFE = 300_000; // ~225KB effettivi
+
   async function handleFile(file){
     if (!file||!isConnected||!e2e.ready) return;
     try{
-      const img=await blobToImage(file);
-      let {b64,width,height,blob}=await adaptAndEncodeImage(img);
-      const {iv,ct}=await e2e.encrypt(b64);
-      if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'image',iv,ct,mime:'image/jpeg',w:width,h:height}));
-      addImage(URL.createObjectURL(blob),'me');
+      const img = await blobToImage(file);
+
+      // Prima passata con profili progressivi
+      let { b64, width, height, blob } = await adaptAndEncodeImage(img);
+
+      // Se ancora troppo grande, compressione aggressiva 320px
+      if (b64.length > IMG_MAX_B64_SAFE) {
+        const tiny = await imageToJpegBlob(img, { maxW: 320, maxH: 320, quality: 0.68 });
+        const tinyB64 = await blobToBase64(tiny.blob);
+
+        if (tinyB64.length > IMG_MAX_B64_SAFE) {
+          addMsg('⚠️ Immagine troppo grande anche dopo compressione. Riprova con una foto più piccola.', 'me');
+          return;
+        }
+        b64 = tinyB64; width = tiny.width; height = tiny.height; blob = tiny.blob;
+      }
+
+      // Cifratura + invio (con fallback estremo se la cifratura dovesse fallire)
+      try {
+        const { iv, ct } = await e2e.encrypt(b64);
+        if (ws && ws.readyState === 1){
+          ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:width, h:height }));
+        }
+        addImage(URL.createObjectURL(blob), 'me');
+      } catch (encErr) {
+        console.warn('Encrypt immagine fallita, riprovo a 320px:', encErr);
+        const tiny2 = await imageToJpegBlob(img, { maxW: 320, maxH: 320, quality: 0.68 });
+        const tinyB64_2 = await blobToBase64(tiny2.blob);
+        if (tinyB64_2.length > IMG_MAX_B64_SAFE) {
+          addMsg('⚠️ Immagine troppo grande per invio sicuro.', 'me');
+          return;
+        }
+        const { iv, ct } = await e2e.encrypt(tinyB64_2);
+        if (ws && ws.readyState === 1){
+          ws.send(JSON.stringify({ type:'image', iv, ct, mime:'image/jpeg', w:tiny2.width, h:tiny2.height }));
+        }
+        addImage(URL.createObjectURL(tiny2.blob), 'me');
+      }
+
     }catch(err){
-      alert('Errore invio foto: '+(err?.message||err));
+      console.error('Errore invio foto:', err);
+      alert('Errore invio foto: ' + (err && err.message ? err.message : err));
     }
   }
 
