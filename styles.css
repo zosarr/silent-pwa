@@ -183,9 +183,15 @@ header .actions {
 .photo-menu button:hover { filter: brightness(0.95); }
 
 /* Fingerprint UI */
-.fp { border: 1px solid #333; padding: .75rem; border-radius: .75rem; margin: .5rem 0; background: #111; }
-.fp-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
-.fp code { font-weight: 600; }
-.fp-warn { color: #f7b500; }
-.fp-ok { color: #2ecc71; }
-.hidden { display: none; }
+/* niente “finestra nera” */
+.fp { background: transparent; border: 0; padding: 0; margin: .5rem 0; }
+
+/* codici leggibili e a capo */
+.fp code { font-weight: 600; word-break: break-all; overflow-wrap: anywhere; }
+
+/* nascondi FORTE */
+.hidden { display: none !important; }
+
+/* se il box è dentro <details>, chiuso = nascosto */
+details:not([open]) #fp-box { display: none !important; }
+
