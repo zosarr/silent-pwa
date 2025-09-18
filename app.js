@@ -128,18 +128,28 @@ window.addEventListener('DOMContentLoaded', () => {
   const COPY_MY_FP = document.getElementById('copy-my-fp');
   const CONFIRM_FP = document.getElementById('confirm-fp');
 
-  function updateFpStatus() {
-    if (!FP_BOX) return;
+ function updateFpStatus() {
+  if (!FP_BOX || !FP_STATUS) return;
+  const hasMy = !!((MY_FP?.textContent || '').trim().length);
+  const hasPeer = !!((PEER_FP?.textContent || '').trim().length);
+  const hasFp = hasMy && hasPeer;
+
+  if (SESSION_VERIFIED) {
     FP_BOX.classList.remove('hidden');
-    if (SESSION_VERIFIED) {
-      FP_STATUS.textContent = '✅ Sessione verificata';
-      FP_STATUS.classList.remove('fp-warn'); FP_STATUS.classList.add('fp-ok');
-    } else {
-      FP_STATUS.textContent = '⚠️ Chiave non verificata';
-      FP_STATUS.classList.remove('fp-ok'); FP_STATUS.classList.add('fp-warn');
-    }
+    FP_STATUS.textContent = '✅ Sessione verificata';
+    FP_STATUS.classList.remove('fp-warn');
+    FP_STATUS.classList.add('fp-ok');
+  } else if (hasFp) {
+    FP_BOX.classList.remove('hidden');
+    FP_STATUS.textContent = '⚠️ Chiave non verificata';
+    FP_STATUS.classList.remove('fp-ok');
+    FP_STATUS.classList.add('fp-warn');
+  } else {
+    // niente impronte → tieni nascosto (sparisce la “striscia nera”)
+    FP_BOX.classList.add('hidden');
   }
-  updateFpStatus();
+}
+
 
   function ensureVerifiedOrConfirm(){
     if (SESSION_VERIFIED) return true;
