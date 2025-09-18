@@ -1,4 +1,4 @@
-// app.js — Silent PWA (testo, foto, audio E2E)
+// app.js — Silent PWA (testo, foto, audio E2E) con cache chiavi 5 minuti
 
 import { E2E } from './crypto.js';
 import { applyLang } from './i18n.js';
@@ -24,6 +24,83 @@ window.addEventListener('DOMContentLoaded', () => {
 
   let sessionStarted = false;
   let pendingPeerKey = null;
+
+  // ===== Key cache (TTL 5 minuti) =====
+  const KEYCACHE_KEY = 'e2e_keycache_v1';
+  const KEYCACHE_TTL_MS = 5 * 60 * 1000;
+
+  function nowMs(){ return Date.now(); }
+
+  function loadKeyCache(){
+    try{
+      const raw = localStorage.getItem(KEYCACHE_KEY);
+      if(!raw) return null;
+      const obj = JSON.parse(raw);
+      if(!obj || !obj.expiresAt || nowMs() > obj.expiresAt){ localStorage.removeItem(KEYCACHE_KEY); return null; }
+      return obj;
+    }catch{ return null; }
+  }
+
+  function clearKeyCache(){ localStorage.removeItem(KEYCACHE_KEY); }
+
+  async function saveKeyCache({ myPrivJwk, myPubRawB64, peerPubRawB64 }){
+    const payload = {
+      myPrivJwk,
+      myPubRawB64,
+      peerPubRawB64,
+      expiresAt: nowMs() + KEYCACHE_TTL_MS
+    };
+    localStorage.setItem(KEYCACHE_KEY, JSON.stringify(payload));
+  }
+
+  function importEcdhPrivateFromJwk(jwk){
+    return crypto.subtle.importKey(
+      'jwk',
+      jwk,
+      { name:'ECDH', namedCurve:'P-256' },
+      true,
+      ['deriveKey','deriveBits']
+    );
+  }
+
+  function importEcdhPublicRawB64(b64){
+    const bin = Uint8Array.from(atob(b64), c=>c.charCodeAt(0));
+    return crypto.subtle.importKey('raw', bin, {name:'ECDH', namedCurve:'P-256'}, true, []);
+  }
+
+  async function tryRestoreFromCache(){
+    const c = loadKeyCache();
+    if(!c) return false;
+
+    try{
+      const priv = await importEcdhPrivateFromJwk(c.myPrivJwk);
+      const pub  = await importEcdhPublicRawB64(c.myPubRawB64);
+      e2e.ecKeyPair = { privateKey: priv, publicKey: pub };
+
+      if (c.peerPubRawB64){
+        await e2e.setPeerPublicKey(c.peerPubRawB64);
+        e2e.peerPubRawB64 = c.peerPubRawB64;
+        sessionStarted = true;
+      }
+
+      // UI hint
+      if (els.connTitle) {
+        els.connTitle.textContent=': connesso (E2E attiva)';
+      }
+      // ripopola la mia pubblica nel campo se assente
+      if (els.myPub && !els.myPub.value) {
+        els.myPub.value = c.myPubRawB64 || '';
+      }
+      // mantieni myPubExpected coerente per evitare input accidentali
+      myPubExpected = c.myPubRawB64 || myPubExpected;
+
+      return true;
+    }catch(err){
+      console.warn('Ripristino cache chiavi fallito:', err);
+      clearKeyCache();
+      return false;
+    }
+  }
 
   // ===== DOM =====
   const $ = (s) => document.querySelector(s);
@@ -65,7 +142,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 
   // ===== Utils =====
-  const escapeHtml = (s) => (s ? s.replace(/[&<>"']/g, m => ({
+  const escapeHtml = (s) => (s ? s.replace(/[&<>\"']/g, m => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[m])) : '');
 
@@ -159,8 +236,7 @@ window.addEventListener('DOMContentLoaded', () => {
       {max:960,q:0.80},{max:720,q:0.76},{max:600,q:0.74},
       {max:480,q:0.72},{max:360,q:0.70},
     ];
-    // ~300k chars base64 ≈ ~225 KB reali → sicuro per cifratura/JSON
-    const SAFE_B64_LEN = 300_000;
+    const SAFE_B64_LEN = 300_000; // ~225KB reali
 
     let lastBlob=null,lastW=null,lastH=null,lastB64=null;
 
@@ -172,7 +248,6 @@ window.addEventListener('DOMContentLoaded', () => {
         return { b64, width, height, blob };
       }
     }
-    // Se nessun target rientra, restituisco l'ultimo provato; il chiamante farà un'ulteriore compressione aggressiva.
     return { b64:lastB64, width:lastW, height:lastH, blob:lastBlob };
   }
 
@@ -243,8 +318,31 @@ window.addEventListener('DOMContentLoaded', () => {
     if (isConnecting||isConnected) return;
     isConnecting=true; setConnState(false);
     try{ ws=new WebSocket(FORCED_WS);}catch(e){ isConnecting=false; return;}
-    ws.addEventListener('open',async ()=>{isConnecting=false; setConnState(true); backoffMs=2000; await ensureKeys();});
-    ws.addEventListener('close',()=>{ updatePeerBadge(null); isConnecting=false; setConnState(false); sessionStarted=false; pendingPeerKey=null; setTimeout(connect,backoffMs=Math.min(backoffMs*2,15000));});
+
+    ws.addEventListener('open',async ()=>{
+      isConnecting=false; setConnState(true); backoffMs=2000;
+      await ensureKeys();
+
+      // tenta ripristino chiavi da cache (se entro 5 minuti)
+      if (await tryRestoreFromCache()){
+        // ri-annuncia subito la mia chiave al peer (utile dopo reconnect)
+        try{
+          const myRaw = myPubExpected || (els.myPub?.value || '');
+          if (myRaw && ws && ws.readyState === 1){
+            ws.send(JSON.stringify({ type:'key', raw: myRaw }));
+          }
+        }catch(_){/* no-op */}
+      }
+    });
+
+    ws.addEventListener('close',()=>{
+      updatePeerBadge(null);
+      isConnecting=false; setConnState(false);
+      // non cancellare la cache: scade da sola
+      sessionStarted=false; pendingPeerKey=null;
+      setTimeout(connect,backoffMs=Math.min(backoffMs*2,15000));
+    });
+
     ws.addEventListener('message',async ev=>{
       try{
         const msg=JSON.parse(ev.data);
@@ -266,7 +364,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (msg.type==='msg'){ addMsg(await e2e.decrypt(msg.iv,msg.ct),'peer'); return;}
         if (msg.type==='image'){ const b64=await e2e.decrypt(msg.iv,msg.ct); const buf=b64ToAb(b64); const blob=new Blob([buf],{type:msg.mime||'image/jpeg'}); addImage(URL.createObjectURL(blob),'peer'); return;}
         if (msg.type==='audio'){ const b64=await e2e.decrypt(msg.iv,msg.ct); const buf=b64ToAb(b64); const blob=new Blob([buf],{type:msg.mime||'audio/webm'}); addAudio(URL.createObjectURL(blob),'peer',msg.mime); return;}
-      }catch(e){console.error(e);}
+      }catch(e){console.error(e);} 
     });
   }
 
@@ -284,6 +382,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
       if (ws&&ws.readyState===1){
         ws.send(JSON.stringify({type:'key',raw:myPubExpected||(els.myPub?.value||'')}));
+      }
+
+      // salva in cache (TTL 5 min) per non perdere la sessione se l’app si chiude per poco
+      try{
+        const myPrivJwk = await crypto.subtle.exportKey('jwk', e2e.ecKeyPair.privateKey);
+        const myPubRawB64 = myPubExpected || (els.myPub?.value || '');
+        await saveKeyCache({ myPrivJwk, myPubRawB64, peerPubRawB64: peerRaw });
+      }catch(err){
+        console.warn('Cache chiavi non salvata:', err);
       }
 
       if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
@@ -475,7 +582,6 @@ window.addEventListener('DOMContentLoaded', () => {
   let remainingSec = 60;
 
   function findChatTitleElement() {
-    // prova selettori comuni, poi cerca un heading che contenga "chat"
     return (
       document.querySelector('[data-i18n="chat"]') ||
       document.querySelector('#chatTitle') ||
@@ -493,7 +599,7 @@ window.addEventListener('DOMContentLoaded', () => {
       recBadge.style.marginLeft = '8px';
       recBadge.style.padding = '2px 8px';
       recBadge.style.borderRadius = '999px';
-      recBadge.style.background = '#ef4444'; // rosso
+      recBadge.style.background = '#ef4444';
       recBadge.style.color = '#fff';
       recBadge.style.fontSize = '0.85rem';
       recBadge.style.fontWeight = '600';
@@ -549,7 +655,6 @@ window.addEventListener('DOMContentLoaded', () => {
     recBtn.addEventListener('click',async ()=>{
       if (!isConnected||!e2e.ready) return alert('Non connesso o E2E non pronto');
       try{
-        // reset/stream
         mediaStream?.getTracks().forEach(t=>t.stop());
         mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
         audioChunks=[]; audioMime=pickBestAudioMime();
@@ -577,25 +682,20 @@ window.addEventListener('DOMContentLoaded', () => {
           } catch (err) {
             alert('Errore invio audio: '+(err?.message||err));
           } finally {
-            // ripristina UI e risorse
             mediaStream?.getTracks().forEach(t=>t.stop());
             mediaStream=null; mediaRecorder=null; audioChunks=[];
             recBtn.disabled=false; stopBtn.disabled=true;
-            // reset stile Rec
             recBtn.style.backgroundColor = '';
             recBtn.style.color = '';
           }
         };
 
-        // start + timeslice 1s
         try{ mediaRecorder.start(1000);}catch{ mediaRecorder.start(); }
 
-        // Rec in rosso durante la registrazione + badge countdown
         recBtn.style.backgroundColor = 'red';
         recBtn.style.color = 'white';
         showRecBadge(60);
 
-        // limite 60s
         audioTimer=setTimeout(()=>{
           if(mediaRecorder&&mediaRecorder.state!=='inactive'){
             mediaRecorder.stop();
