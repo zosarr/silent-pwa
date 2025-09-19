@@ -436,11 +436,15 @@ window.addEventListener('DOMContentLoaded', () => {
         localStorage.removeItem('sessionVerified');
         updateFpStatus();
         COPY_MY_FP?.addEventListener('click', () => { navigator.clipboard?.writeText(MY_FP?.textContent||''); }, { once: true });
+        // ⬇️ MODIFICATO: qui aggiungiamo anche la chiusura del <details> quando si conferma la corrispondenza
         CONFIRM_FP?.addEventListener('click', () => {
           SESSION_VERIFIED = true;
           localStorage.setItem('sessionVerified','1');
           updateFpStatus();
           try{ addSystemMsg && addSystemMsg('Sessione verificata: fingerprint coincidenti'); }catch{}
+          // Chiudi la tendina "Scambio di chiavi" SOLO dopo conferma corrispondenza
+          const details = document.querySelector('details');
+          if (details) details.open = false;
         }, { once: true });
       } catch(_){/* ignore */}
 
@@ -460,9 +464,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
       if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
 
-      // chiudi la tendina "Scambio di chiavi"
-      const details = document.querySelector('details');
-      if (details) details.open = false;
+      // ⛔️ RIMOSSO: la chiusura automatica del <details> che prima avveniva qui.
+      // Ora la sezione si chiude solo quando si preme "Conferma corrispondenza".
 
     } catch (err) {
       console.error('Errore Avvia sessione:', err);
