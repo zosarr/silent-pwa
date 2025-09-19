@@ -87,6 +87,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (els.connTitle) {
         els.connTitle.textContent=': connesso (E2E attiva)';
       }
+      // ripopola la mia pubblica nel campo se assente
       if (els.myPub && !els.myPub.value) {
         els.myPub.value = c.myPubRawB64 || '';
       }
@@ -108,7 +109,8 @@ window.addEventListener('DOMContentLoaded', () => {
     clearBtn:    $('#clearBtn'),
     connTitle:   document.querySelector('[data-i18n="connection"]'),
     connStatus:  $('#connStatus'),
-    verifiedBadge: $('#verifiedBadge'),
+    // stato chiave SPOSTATO sotto ": connesso"
+    fpStatus:    document.getElementById('fp-status'),
     myPub:       $('#myPub'),
     copyMyBtn:   $('#copyMyPubBtn'),
     peerPub:     $('#peerPub'),
@@ -120,46 +122,43 @@ window.addEventListener('DOMContentLoaded', () => {
   };
   // === Fingerprint UI ===
   let SESSION_VERIFIED = localStorage.getItem('sessionVerified') === '1';
-  const FP_BOX = document.getElementById('fp-box');
-  const MY_FP = document.getElementById('my-fp');
-  const PEER_FP = document.getElementById('peer-fp');
-  const FP_STATUS = document.getElementById('fp-status');
+  const FP_BOX   = document.getElementById('fp-box');   // contiene "Il mio codice" / "Codice utente"
+  const MY_FP    = document.getElementById('my-fp');
+  const PEER_FP  = document.getElementById('peer-fp');
   const COPY_MY_FP = document.getElementById('copy-my-fp');
-  const CONFIRM_FP = document.getElementById('confirm-fp');
+  const CONFIRM_FP  = document.getElementById('confirm-fp');
 
-  function updateVerifiedBadge(){
-    if (!els.verifiedBadge) return;
-    if (SESSION_VERIFIED) {
-      els.verifiedBadge.textContent = '✅ Sessione verificata';
-      els.verifiedBadge.style.display = 'block';
-    } else {
-      els.verifiedBadge.textContent = '';
-      els.verifiedBadge.style.display = 'none';
-    }
-  }
-
+  // Aggiorna lo stato mostrato sotto ": connesso"
   function updateFpStatus() {
-    if (!FP_BOX || !FP_STATUS) return;
-    const hasMy = !!((MY_FP?.textContent || '').trim().length);
-    const hasPeer = !!((PEER_FP?.textContent || '').trim().length);
-    const hasFp = hasMy && hasPeer;
+    if (!els.fpStatus) return;
 
-    if (SESSION_VERIFIED) {
-      FP_BOX.classList.remove('hidden');
-      FP_STATUS.textContent = '✅ Codice verificata';
-      FP_STATUS.classList.remove('fp-warn');
-      FP_STATUS.classList.add('fp-ok');
-    } else if (hasFp) {
-      FP_BOX.classList.remove('hidden');
-      FP_STATUS.textContent = '⚠️ Codice non verificato';
-      FP_STATUS.classList.remove('fp-ok');
-      FP_STATUS.classList.add('fp-warn');
-    } else {
-      FP_BOX.classList.add('hidden');
+    const hasMy   = !!((MY_FP?.textContent || '').trim().length);
+    const hasPeer = !!((PEER_FP?.textContent || '').trim().length);
+    const hasFp   = hasMy && hasPeer;
+
+    // mostra/nascondi il box impronte nella tendina
+    if (FP_BOX) {
+      FP_BOX.classList.toggle('hidden', !hasFp);
     }
 
-    // Aggiorna anche il badge sotto ": connesso"
-    updateVerifiedBadge();
+    // Mostra lo stato SOLO quando ci sono entrambe le impronte
+    if (!hasFp) {
+      els.fpStatus.style.display = 'none';
+      els.fpStatus.textContent = '';
+      els.fpStatus.classList.remove('fp-ok','fp-warn');
+      return;
+    }
+
+    els.fpStatus.style.display = 'block';
+    if (SESSION_VERIFIED) {
+      els.fpStatus.textContent = '✅ Sessione verificata';
+      els.fpStatus.classList.remove('fp-warn');
+      els.fpStatus.classList.add('fp-ok');
+    } else {
+      els.fpStatus.textContent = '⚠️ Chiave non verificata';
+      els.fpStatus.classList.remove('fp-ok');
+      els.fpStatus.classList.add('fp-warn');
+    }
   }
 
   function ensureVerifiedOrConfirm(){
@@ -274,7 +273,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function b64ToAb(b64){
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
-    for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(0);
     return bytes.buffer;
   }
 
@@ -317,8 +316,7 @@ window.addEventListener('DOMContentLoaded', () => {
       els.connStatus.classList.toggle('connected',connected);
       els.connStatus.classList.toggle('disconnected',!connected);
     }
-    // mostra/nascondi badge verificato coerentemente quando cambia stato
-    updateVerifiedBadge();
+    // lo stato chiave viene aggiornato a parte
   }
   setConnState(false);
 
@@ -348,7 +346,7 @@ window.addEventListener('DOMContentLoaded', () => {
     keysGenerated=true;
   }
 
-  // Copia chiave
+  // Copia chiave – feedback veloce
   els.copyMyBtn && els.copyMyBtn.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(els.myPub?.value || '');
@@ -372,11 +370,14 @@ window.addEventListener('DOMContentLoaded', () => {
       isConnecting=false; setConnState(true); backoffMs=2000;
       await ensureKeys();
 
+      // tenta ripristino chiavi
       if (await tryRestoreFromCache()){
+        // ripristina stato verifica ma NON mostra nulla finché non calcoliamo le impronte
         if (localStorage.getItem('sessionVerified') === '1') {
           SESSION_VERIFIED = true;
-          updateFpStatus();
         }
+        updateFpStatus();
+        // ri-annuncia la mia chiave
         try{
           const myRaw = myPubExpected || (els.myPub?.value || '');
           if (myRaw && ws && ws.readyState === 1){
@@ -425,24 +426,23 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!peerRaw) return alert('Incolla la chiave del peer o attendi.');
 
     try {
-      await e2e.setPeerPublicKey(peerRaw);
+      await e2e.setPeerPublicKey(peerRaw);         // E2E pronto
       e2e.peerPubRawB64=peerRaw;
       
       // === Fingerprint: calcola e mostra ===
       try {
         const myRaw = myPubExpected || (els.myPub?.value || '');
-        if (myRaw) {
-          MY_FP && (MY_FP.textContent = await fingerprintFromRawBase64(myRaw));
-        }
-        if (peerRaw) {
-          PEER_FP && (PEER_FP.textContent = await fingerprintFromRawBase64(peerRaw));
-        }
+        if (myRaw)  MY_FP   && (MY_FP.textContent   = await fingerprintFromRawBase64(myRaw));
+        if (peerRaw)PEER_FP && (PEER_FP.textContent = await fingerprintFromRawBase64(peerRaw));
+
         SESSION_VERIFIED = false;
         localStorage.removeItem('sessionVerified');
         updateFpStatus();
+
+        // copy codice mio
         COPY_MY_FP?.addEventListener('click', () => { navigator.clipboard?.writeText(MY_FP?.textContent||''); }, { once: true });
 
-        // Conferma codice → set flag + attesa 2s → chiudi details
+        // Conferma corrispondenza → set flag + attesa 2s → chiudi details
         CONFIRM_FP?.addEventListener('click', () => {
           SESSION_VERIFIED = true;
           localStorage.setItem('sessionVerified','1');
@@ -451,15 +451,17 @@ window.addEventListener('DOMContentLoaded', () => {
           setTimeout(() => {
             const details = document.querySelector('details');
             if (details) details.open = false;
-          }, 2000); // <-- attesa 2 secondi prima di chiudere
+          }, 2000);
         }, { once: true });
 
-      } catch(_){}
+      } catch(_){/* ignore */}
+
 
       if (ws&&ws.readyState===1){
         ws.send(JSON.stringify({type:'key',raw:myPubExpected||(els.myPub?.value||'')}));
       }
 
+      // salva in cache (TTL 5 min)
       try{
         const myPrivJwk = await crypto.subtle.exportKey('jwk', e2e.ecKeyPair.privateKey);
         const myPubRawB64 = myPubExpected || (els.myPub?.value || '');
@@ -489,10 +491,11 @@ window.addEventListener('DOMContentLoaded', () => {
   els.input && els.input.addEventListener('keydown',(e)=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); els.sendBtn.click(); }});
   els.clearBtn && els.clearBtn.addEventListener('click',()=>{ if(els.log) els.log.innerHTML=''; });
 
-  // ===== Foto =====
+  // ===== Foto: mini-menu =====
   function ensurePhotoControls(){
     if (!els.composer || document.getElementById('photoBtn')) return;
 
+    // Bottone "Foto"
     const photoBtn = document.createElement('button');
     photoBtn.id = 'photoBtn';
     photoBtn.textContent = 'Foto';
@@ -500,6 +503,7 @@ window.addEventListener('DOMContentLoaded', () => {
     photoBtn.style.marginLeft = '6px';
     els.composer.appendChild(photoBtn);
 
+    // Input nascosti: camera & galleria
     const cameraInput  = document.createElement('input');
     cameraInput.type = 'file';
     cameraInput.accept = 'image/*';
@@ -514,10 +518,12 @@ window.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(cameraInput);
     document.body.appendChild(galleryInput);
 
+    // Posizionamento menu
     if (getComputedStyle(els.composer).position === 'static') {
       els.composer.style.position = 'relative';
     }
 
+    // Mini-menu sovrapposto
     const menu = document.createElement('div');
     menu.id = 'photoMenu';
     menu.style.position = 'absolute';
@@ -541,12 +547,14 @@ window.addEventListener('DOMContentLoaded', () => {
     const openMenu  = () => { menu.style.display = 'block'; };
     const closeMenu = () => { menu.style.display = 'none'; };
 
+    // Apertura menu
     photoBtn.addEventListener('click', (e) => {
       e.preventDefault();
       if (menu.style.display === 'block') closeMenu();
       else openMenu();
     });
 
+    // Scelte nel menu
     menu.addEventListener('click', (e) => {
       const act = e.target?.getAttribute('data-act');
       if (act === 'camera') {
@@ -560,15 +568,18 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    // Chiudi cliccando fuori
     document.addEventListener('click', (e) => {
       const clickedInside = menu.contains(e.target) || e.target === photoBtn;
       if (!clickedInside) closeMenu();
     });
 
+    // Chiudi con ESC
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeMenu();
     });
 
+    // Selezione file → invio
     cameraInput.addEventListener('change', () => {
       if (cameraInput.files && cameraInput.files[0]) {
         closeMenu();
@@ -585,15 +596,18 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  const IMG_MAX_B64_SAFE = 300_000;
+  // === Guard-rail dimensione per immagini ===
+  const IMG_MAX_B64_SAFE = 300_000; // ~225KB effettivi
 
   async function handleFile(file){
     if (!file||!isConnected||!e2e.ready) return;
     try{
       const img = await blobToImage(file);
 
+      // Prima passata con profili progressivi
       let { b64, width, height, blob } = await adaptAndEncodeImage(img);
 
+      // Se ancora troppo grande, compressione aggressiva 320px
       if (b64.length > IMG_MAX_B64_SAFE) {
         const tiny = await imageToJpegBlob(img, { maxW: 320, maxH: 320, quality: 0.68 });
         const tinyB64 = await blobToBase64(tiny.blob);
@@ -605,6 +619,7 @@ window.addEventListener('DOMContentLoaded', () => {
         b64 = tinyB64; width = tiny.width; height = tiny.height; blob = tiny.blob;
       }
 
+      // Cifratura + invio (con fallback estremo se la cifratura dovesse fallire)
       try {
         if (!ensureVerifiedOrConfirm()) return;
         const { iv, ct } = await e2e.encrypt(b64);
@@ -637,6 +652,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let mediaStream=null, mediaRecorder=null, audioChunks=[], audioMime='audio/webm;codecs=opus', audioTimer=null;
   const MAX_B64_SAFE=300_000;
 
+  // --- Badge countdown accanto a "Chat"
   let recBadge = null;
   let countdownInterval = null;
   let remainingSec = 60;
