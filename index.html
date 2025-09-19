@@ -1,132 +1,96 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="it">
 <head>
-  <meta charset="utf-8" />
-  <title>Gestione Sessione</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Bootstrap (grafica “come prima” se usavi il componente Collapse) -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Silent</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0d0d0f"/>
+  <link rel="apple-touch-icon" href="./icons/1.png">
+  <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-light">
-  <div class="container py-4">
-    <div class="row justify-content-center">
-      <div class="col-12 col-lg-8">
-
-        <div class="d-flex align-items-center mb-3">
-          <h1 class="h4 mb-0">Gestione Sessione</h1>
-        </div>
-
-        <div class="card shadow-sm mb-3">
-          <div class="card-body">
-            <div class="d-flex gap-2 flex-wrap">
-              <!-- AVVIA SESSIONE: rimosso data-bs-toggle/target per NON chiudere la tendina -->
-              <button id="btnAvvia" type="button" class="btn btn-primary">
-                Avvia sessione
-              </button>
-
-              <!-- CONFERME CORRISPONDENZA: aggiunti data-bs-toggle/target per CHIUDERE la tendina -->
-              <button id="btnConferme" type="button" class="btn btn-success"
-                      data-bs-toggle="collapse" data-bs-target="#scambioChiavi" aria-expanded="true" aria-controls="scambioChiavi">
-                Conferme corrispondenza
-              </button>
-
-              <button id="btnAnnulla" type="button" class="btn btn-outline-secondary">
-                Annulla
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- SEZIONE A TENDINA: Scambio chiavi -->
-        <div class="card shadow-sm">
-          <div class="card-header">
-            <div class="d-flex justify-content-between align-items-center">
-              <span class="fw-semibold">Scambio chiavi</span>
-              <!-- Indicatore stato semplice -->
-              <span id="statusBadge" class="badge text-bg-secondary">In attesa</span>
-            </div>
-          </div>
-
-          <!-- DEFAULT: aperta. L’id deve combaciare con data-bs-target -->
-          <div id="scambioChiavi" class="collapse show">
-            <div class="card-body">
-              <div class="row g-3">
-                <div class="col-12 col-md-6">
-                  <label for="algoritmo" class="form-label">Algoritmo</label>
-                  <select id="algoritmo" class="form-select">
-                    <option>ECDH-secp256r1</option>
-                    <option>ECDH-x25519</option>
-                    <option>DH-4096</option>
-                  </select>
-                </div>
-                <div class="col-12">
-                  <label for="chiavePubblica" class="form-label">Chiave pubblica (PEM)</label>
-                  <textarea id="chiavePubblica" class="form-control" rows="4" placeholder="-----BEGIN PUBLIC KEY-----&#10;..."></textarea>
-                </div>
-              </div>
-
-              <hr class="my-3">
-
-              <div class="small text-muted">
-                Non sarà più la pressione di <strong>Avvia sessione</strong> a chiudere questa sezione;
-                la chiude <strong>Conferme corrispondenza</strong>.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Log opzionale -->
-        <div class="card shadow-sm mt-3">
-          <div class="card-body">
-            <pre id="log" class="mb-0 small text-body-secondary" style="white-space: pre-wrap;"></pre>
-          </div>
-        </div>
-
-      </div>
+<body>
+  <header>
+    <div class="brand">
+      <img src="icons/1.png" alt="Silent" width="32" height="32">
+      <h1>Silent</h1>
     </div>
+    <div class="actions">
+      <select id="langSelect" aria-label="Language">
+        <option value="it">Italiano</option>
+        <option value="en">English</option>
+      </select>
+      <button id="installBtn" class="ghost">Install</button>
+      <button id="clearBtn" class="danger" data-i18n="clear">Pulisci</button>
+    </div>
+  </header>
+
+  <main>
+<section class="panel">
+ <h2 data-i18n="connection">:</h2>  
+  <!-- Box stato -->
+  <div id="connStatus" class="status-box disconnected">
+    Non connesso
   </div>
 
-  <!-- Bootstrap JS -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <details>
+    <summary data-i18n="session">Scambio chiavi</summary>
+    <div class="grid2">
+      <label>
+        <span data-i18n="myPub">La mia chiave</span>
+        <textarea id="myPub" readonly></textarea>
+        <div class="row">
+          <button id="copyMyPubBtn">Copia chiave</button>
+        </div>
+      </label>
 
-  <script>
-    // Riferimenti
-    const btnAvvia = document.getElementById('btnAvvia');
-    const btnConferme = document.getElementById('btnConferme');
-    const btnAnnulla = document.getElementById('btnAnnulla');
-    const statusBadge = document.getElementById('statusBadge');
-    const logEl = document.getElementById('log');
+     <label>
+    <span data-i18n="peerPub">Chiave utente (incolla)</span>
+    <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
+</label>
 
-    const log = (m) => {
-      const t = new Date().toLocaleTimeString();
-      logEl.textContent += `[${t}] ${m}\n`;
-    };
+    </div>
 
-    // Avvia sessione: NON chiude la tendina (nessun toggle Bootstrap qui)
-    btnAvvia.addEventListener('click', () => {
-      statusBadge.className = 'badge text-bg-info';
-      statusBadge.textContent = 'Sessione avviata';
-      log('Avvio sessione richiesto (la sezione Scambio chiavi resta aperta).');
-      // eventuali chiamate API...
-    });
+    <div class="row">
+      <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
+      <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
+    </div>
 
-    // Conferme corrispondenza: farà il toggle grazie ai data-bs- attributi sul bottone
-    // Qui possiamo aggiungere solo log/stato senza occuparci del collapse manualmente.
-    btnConferme.addEventListener('click', () => {
-      statusBadge.className = 'badge text-bg-success';
-      statusBadge.textContent = 'Corrispondenza confermata';
-      log('Conferme corrispondenza inviate (sezione Scambio chiavi chiusa a tendina).');
-    });
+  <div id="fp-box" class="fp hidden">
+  <div class="fp-row">
+    <span>Il mio codice:</span>
+    <code id="my-fp"></code>
+    <button id="copy-my-fp" type="button">Copia</button>
+  </div>
+  <div class="fp-row">
+    <span>Codice utente:</span>
+    <code id="peer-fp"></code>
+    <button id="confirm-fp" type="button">Conferma corrisponde</button>
+  </div>
+  <p id="fp-status" class="fp-warn">⚠️ Chiave non verificata</p>
+</div>
 
-    // Annulla: riapre la tendina se era chiusa
-    btnAnnulla.addEventListener('click', () => {
-      const target = document.getElementById('scambioChiavi');
-      const instance = bootstrap.Collapse.getOrCreateInstance(target, { toggle: false });
-      instance.show();
-      statusBadge.className = 'badge text-bg-secondary';
-      statusBadge.textContent = 'In attesa';
-      log('Operazione annullata. Sezione Scambio chiavi riaperta.');
-    });
-  </script>
+  </details>
+</section>
+
+    
+    <section class="panel">
+      <h2 data-i18n="chat">Chat</h2>
+      <ul id="log" class="messages" aria-live="polite"></ul>
+      <div class="composer">
+        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
+        <button id="sendBtn" data-i18n="send">Invia</button>
+      </div>
+      <small data-i18n="autodestruct">I messaggi si autodistruggono 5 minuti dopo la lettura.</small>
+    </section>
+  </main>
+
+  <footer>
+    <span>Silent • https://silent-pwa.netlify.app</span>
+  </footer>
+
+  <script type="module" src="i18n.js"></script>
+  <script type="module" src="crypto.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
