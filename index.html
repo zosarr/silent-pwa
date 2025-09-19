@@ -26,55 +26,54 @@
   </header>
 
   <main>
-<section class="panel">
- <h2 data-i18n="connection">:</h2>  
-  <!-- Box stato -->
-  <div id="connStatus" class="status-box disconnected">
-    Non connesso
-  </div>
+    <section class="panel">
+      <h2 data-i18n="connection">:</h2>
+      <!-- Badge verifica sotto ": connesso" -->
+      <div id="verifiedBadge" class="verified-badge" style="display:none;"></div>
 
-  <details>
-    <summary data-i18n="session">Scambio chiavi</summary>
-    <div class="grid2">
-      <label>
-        <span data-i18n="myPub">La mia chiave</span>
-        <textarea id="myPub" readonly></textarea>
-        <div class="row">
-          <button id="copyMyPubBtn">Copia chiave</button>
+      <!-- Box stato connessione -->
+      <div id="connStatus" class="status-box disconnected">
+        Non connesso
+      </div>
+
+      <details>
+        <summary data-i18n="session">Scambio chiavi</summary>
+        <div class="grid2">
+          <label>
+            <span data-i18n="myPub">La mia chiave</span>
+            <textarea id="myPub" readonly></textarea>
+            <div class="row">
+              <button id="copyMyPubBtn">Copia chiave</button>
+            </div>
+          </label>
+
+          <label>
+            <span data-i18n="peerPub">Chiave utente (incolla)</span>
+            <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
+          </label>
         </div>
-      </label>
 
-     <label>
-    <span data-i18n="peerPub">Chiave utente (incolla)</span>
-    <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
-</label>
+        <div class="row">
+          <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
+          <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
+        </div>
 
-    </div>
+        <div id="fp-box" class="fp hidden">
+          <div class="fp-row">
+            <span>Il mio codice:</span>
+            <code id="my-fp"></code>
+            <button id="copy-my-fp" type="button">Copia</button>
+          </div>
+          <div class="fp-row">
+            <span>Codice utente:</span>
+            <code id="peer-fp"></code>
+            <button id="confirm-fp" type="button">Conferma corrispondenza</button>
+          </div>
+          <p id="fp-status" class="fp-warn">⚠️ Chiave non verificata</p>
+        </div>
+      </details>
+    </section>
 
-    <div class="row">
-      <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
-      <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
-    </div>
-
-  <div id="fp-box" class="fp hidden">
-  <div class="fp-row">
-    <span>Il mio codice:</span>
-    <code id="my-fp"></code>
-    <button id="copy-my-fp" type="button">Copia</button>
-  </div>
-  <div class="fp-row">
-    <span>Codice utente:</span>
-    <code id="peer-fp"></code>
-    <!-- ⬇️ Testo aggiornato -->
-    <button id="confirm-fp" type="button">Conferma corrispondenza</button>
-  </div>
-  <p id="fp-status" class="fp-warn">⚠️ Chiave non verificata</p>
-</div>
-
-  </details>
-</section>
-
-    
     <section class="panel">
       <h2 data-i18n="chat">Chat</h2>
       <ul id="log" class="messages" aria-live="polite"></ul>
