@@ -195,3 +195,19 @@ header .actions {
 /* se il box è dentro <details>, chiuso = nascosto */
 details:not([open]) #fp-box { display: none !important; }
 
+/* ...il resto dei tuoi stili... */
+
+/* Badge “Sessione verificata” sotto lo stato di connessione */
+.verified-badge {
+  margin-top: 6px;
+  font-weight: 700;
+  color: #16a34a; /* verde */
+  line-height: 1.2;
+}
+
+/* (opzionali) stili esistenti per fp */
+.fp-warn { color: #b45309; }
+.fp-ok   { color: #16a34a; }
+.hidden  { display: none; }
+
+
