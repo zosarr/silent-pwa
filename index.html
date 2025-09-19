@@ -28,8 +28,9 @@
   <main>
     <section class="panel">
       <h2 data-i18n="connection">:</h2>
-      <!-- Badge verifica sotto ": connesso" -->
-      <div id="verifiedBadge" class="verified-badge" style="display:none;"></div>
+
+      <!-- ⬇️ Stato chiave SPOSTATO qui sotto. Inizialmente nascosto -->
+      <p id="fp-status" class="fp-warn" style="display:none;"></p>
 
       <!-- Box stato connessione -->
       <div id="connStatus" class="status-box disconnected">
@@ -58,6 +59,7 @@
           <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
         </div>
 
+        <!-- Box impronte: resta qui, ma SENZA più lo stato -->
         <div id="fp-box" class="fp hidden">
           <div class="fp-row">
             <span>Il mio codice:</span>
@@ -67,9 +69,9 @@
           <div class="fp-row">
             <span>Codice utente:</span>
             <code id="peer-fp"></code>
-            <button id="confirm-fp" type="button">Conferma codice</button>
+            <button id="confirm-fp" type="button">Conferma corrispondenza</button>
           </div>
-          <p id="fp-status" class="fp-warn">⚠️ Codice non verificato</p>
+          <!-- (RIMOSSO qui il paragrafo con id="fp-status") -->
         </div>
       </details>
     </section>
