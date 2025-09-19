@@ -205,9 +205,18 @@ details:not([open]) #fp-box { display: none !important; }
   line-height: 1.2;
 }
 
-/* (opzionali) stili esistenti per fp */
-.fp-warn { color: #b45309; }
-.fp-ok   { color: #16a34a; }
+/* ...i tuoi stili esistenti... */
+
+/* Stato chiave sotto ": connesso" */
+.fp-warn { color: #b45309; } /* arancio/avviso */
+.fp-ok   { color: #16a34a; } /* verde/ok */
 .hidden  { display: none; }
+
+/* (facoltativo) spaziatura del nuovo stato */
+#fp-status {
+  margin: 4px 0 8px;
+  font-weight: 600;
+}
+
 
 
