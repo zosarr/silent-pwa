@@ -146,12 +146,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (SESSION_VERIFIED) {
       FP_BOX.classList.remove('hidden');
-      FP_STATUS.textContent = '✅ Sessione verificata';
+      FP_STATUS.textContent = '✅ Codice verificata';
       FP_STATUS.classList.remove('fp-warn');
       FP_STATUS.classList.add('fp-ok');
     } else if (hasFp) {
       FP_BOX.classList.remove('hidden');
-      FP_STATUS.textContent = '⚠️ Chiave non verificata';
+      FP_STATUS.textContent = '⚠️ Codice non verificato';
       FP_STATUS.classList.remove('fp-ok');
       FP_STATUS.classList.add('fp-warn');
     } else {
@@ -442,7 +442,7 @@ window.addEventListener('DOMContentLoaded', () => {
         updateFpStatus();
         COPY_MY_FP?.addEventListener('click', () => { navigator.clipboard?.writeText(MY_FP?.textContent||''); }, { once: true });
 
-        // Conferma corrispondenza → set flag + attesa 2s → chiudi details
+        // Conferma codice → set flag + attesa 2s → chiudi details
         CONFIRM_FP?.addEventListener('click', () => {
           SESSION_VERIFIED = true;
           localStorage.setItem('sessionVerified','1');
