@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Silent</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0d0d0f"/>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Silent">
+  <link rel="apple-touch-icon" href="./icons/1.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <img src="icons/1.png" alt="Silent" width="32" height="32">
+      <h1>Silent</h1>
+    </div>
+    <div class="actions">
+      <select id="langSelect" aria-label="Language">
+        <option value="it">Italiano</option>
+        <option value="en">English</option>
+      </select>
+      <button id="installBtn" class="ghost">Install</button>
+      <button id="clearBtn" class="danger" data-i18n="clear">Pulisci</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2 class="conn-header"><span data-i18n="connection">:</span> <button id="disconnectBtn" class="ghost danger" style="display:none;margin-left:.5rem;">Disconnetti</button></h2>
+
+      <!-- ⬇️ Stato chiave SPOSTATO qui sotto. Inizialmente nascosto -->
+      <p id="fp-status" class="fp-warn" style="display:none;"></p>
+
+      <!-- Box stato connessione -->
+      <div id="connStatus" class="status-box disconnected">
+        Non connesso
+      </div>
+
+      <details>
+        <summary data-i18n="session">Scambio chiavi</summary>
+        <div class="grid2">
+          <label>
+            <span data-i18n="myPub">La mia chiave</span>
+            <textarea id="myPub" readonly></textarea>
+            <div class="row">
+              <button id="copyMyPubBtn">Copia chiave</button>
+            </div>
+          </label>
+
+          <label>
+            <span data-i18n="peerPub">Chiave utente (incolla)</span>
+            <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
+          </label>
+        </div>
+
+        <div class="row">
+          <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
+          <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
+        </div>
+
+        <!-- Box impronte: resta qui, ma SENZA più lo stato -->
+        <div id="fp-box" class="fp hidden">
+          <div class="fp-row">
+            <span>Il mio codice:</span>
+            <code id="my-fp"></code>
+            <button id="copy-my-fp" type="button">Copia</button>
+          </div>
+          <div class="fp-row">
+            <span>Codice utente:</span>
+            <code id="peer-fp"></code>
+            <button id="confirm-fp" type="button">Conferma corrispondenza</button>
+          </div>
+          <!-- (RIMOSSO qui il paragrafo con id="fp-status") -->
+        </div>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2 data-i18n="chat">Chat</h2>
+      <ul id="log" class="messages" aria-live="polite"></ul>
+      <div class="composer">
+        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
+        <button id="sendBtn" data-i18n="send">Invia</button>
+      </div>
+      <small data-i18n="autodestruct">I messaggi si autodistruggono 5 minuti dopo la lettura.</small>
+    </section>
+  
+  <div id="iosInstallBanner" class="ios-install-banner" style="display:none;">
+    <div class="ios-install-content">
+      <strong>Installa su iPhone</strong>
+      <p>Apri il menu <span class="ios-share">Condividi</span> e tocca <strong>Aggiungi a Home</strong>.</p>
+      <div class="row">
+        <button id="iosInstallDismiss" class="ghost">Non ora</button>
+        <button id="iosInstallHide" class="danger">Non mostrare più</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+  <footer>
+    <span>Silent • https://silent-pwa.netlify.app</span>
+  </footer>
+
+  <script type="module" src="i18n.js"></script>
+  <script type="module" src="crypto.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
