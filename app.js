@@ -186,11 +186,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
     els.fpStatus.style.display = 'block';
     if (SESSION_VERIFIED) {
-      els.fpStatus.textContent = '✅ Sessione verificata';
+      els.fpStatus.textContent = '✅ Codice verificato';
       els.fpStatus.classList.remove('fp-warn');
       els.fpStatus.classList.add('fp-ok');
     } else {
-      els.fpStatus.textContent = '⚠️ Chiave non verificata';
+      els.fpStatus.textContent = '⚠️ codice non verificato';
       els.fpStatus.classList.remove('fp-ok');
       els.fpStatus.classList.add('fp-warn');
     }
@@ -481,12 +481,12 @@ window.addEventListener('DOMContentLoaded', () => {
         // copy codice mio
         COPY_MY_FP?.addEventListener('click', () => { navigator.clipboard?.writeText(MY_FP?.textContent||''); }, { once: true });
 
-        // Conferma corrispondenza → set flag + attesa 2s → chiudi details
+        // Conferma codice → set flag + attesa 2s → chiudi details
         CONFIRM_FP?.addEventListener('click', () => {
           SESSION_VERIFIED = true;
           localStorage.setItem('sessionVerified','1');
           updateFpStatus();
-          try{ addSystemMsg && addSystemMsg('Sessione verificata: fingerprint coincidenti'); }catch{}
+          try{ addSystemMsg && addSystemMsg('Codice verificato: fingerprint coincidenti'); }catch{}
           setTimeout(() => {
             const details = document.querySelector('details');
             if (details) details.open = false;
