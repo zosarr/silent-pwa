@@ -197,7 +197,7 @@ details:not([open]) #fp-box { display: none !important; }
 
 /* ...il resto dei tuoi stili... */
 
-/* Badge “Sessione verificata” sotto lo stato di connessione */
+/* Badge “Codice verificato” sotto lo stato di connessione */
 .verified-badge {
   margin-top: 6px;
   font-weight: 700;
