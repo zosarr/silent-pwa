@@ -1,9 +1,0 @@
-Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';
-img-src 'self' data: blob:;
-media-src 'self' blob:;
-connect-src 'self' wss://silent-backend.onrender.com ws: wss:;
-manifest-src 'self';
-worker-src 'self';
-object-src 'none'
-
- 
