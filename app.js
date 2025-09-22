@@ -98,7 +98,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('toggleBeepBtn');
     if (!btn) return;
     btn.setAttribute('aria-pressed', beepEnabled ? 'true' : 'false');
-    btn.textContent = beepEnabled ? 'Bip: ON' : 'Bip: OFF';
+    btn.textContent = beepEnabled ? 'Notifica: ON' : 'Notifica: OFF';
   }
 
   try {
