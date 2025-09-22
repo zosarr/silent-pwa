@@ -1,4 +1,4 @@
-const CACHE = 'silent-pwa-v9'; // bump
+const CACHE = 'silent-pwa-v10'; // bump
 
 self.addEventListener('install', (event) => {
   const assets = [
@@ -23,23 +23,13 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   const n = event.notification;
-  const url = (n && n.data && n.data.url) ? n.data.url : (self.registration.scope || './');
   n.close();
   event.waitUntil((async () => {
     const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    // Try to focus an existing client
     for (const client of allClients) {
-      try {
-        if ('focus' in client) {
-          await client.focus();
-          try { if ('navigate' in client) await client.navigate(url); } catch (_) {}
-          return;
-        }
-      } catch (_) {}
+      try { if ('focus' in client) { await client.focus(); return; } } catch (_) {}
     }
-    // Otherwise open a new window
-    if (clients.openWindow) {
-      await clients.openWindow(url);
-    }
+    const target = (self.registration && self.registration.scope) ? self.registration.scope : './';
+    if (clients.openWindow) await clients.openWindow(target + '#chat');
   })());
 });
