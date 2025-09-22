@@ -56,7 +56,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const opts = {
           body,
           icon: './icons/1.png',
-          badge: './icons/notify.png',
+          icon: './icons/notify.png',
           tag: 'silent-new-msg',
           renotify: true,
           data: { url: targetUrl },
