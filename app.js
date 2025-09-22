@@ -55,8 +55,8 @@ window.addEventListener('DOMContentLoaded', () => {
         const targetUrl = (reg && reg.scope) ? (reg.scope + '#chat') : (location.origin + location.pathname + '#chat');
         const opts = {
           body,
-          icon: './icons/1.png',
           icon: './icons/notify.png',
+          badge: './icons/notify.png',
           tag: 'silent-new-msg',
           renotify: true,
           data: { url: targetUrl },
