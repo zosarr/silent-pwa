@@ -1005,9 +1005,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
     else actions.appendChild(gearBtn);
 
-    // Find Clear button (must remain outside)
-const clearBtn = document.getElementById('clearBtn');
-
 // Insert gear before "Pulisci" so Pulisci stays outside
 if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
 else actions.appendChild(gearBtn);
