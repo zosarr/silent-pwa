@@ -1015,11 +1015,11 @@ window.addEventListener('DOMContentLoaded', () => {
       menu.style.position = 'absolute';
       menu.style.top = '100%';
       menu.style.right = '0';
-      menu.style.background = 'rgba(60,60,60,0.95)';
+      menu.style.background = 'rgba(0,0,0,0.95)';
       menu.style.color = '#fff';
       menu.style.padding = '10px';
       menu.style.borderRadius = '12px';
-      menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.25)';
+      menu.style.boxShadow = '0 10px 30px rgba(96,96,96,0.95)';
       menu.style.minWidth = '240px';
       menu.style.backdropFilter = 'blur(6px)';
       actions.appendChild(menu);
