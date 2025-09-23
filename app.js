@@ -1005,14 +1005,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
     else actions.appendChild(gearBtn);
 
-   // Find Clear button (must remain outside)
-const clearBtn = document.getElementById('clearBtn');
-
-// Insert gear before "Pulisci" so Pulisci stays outside
-if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
-else actions.appendChild(gearBtn);
-
- // Create menu container if not present
+    // Create menu container if not present
     let menu = document.getElementById('settingsMenu');
     if (!menu) {
       menu = document.createElement('div');
@@ -1031,8 +1024,9 @@ else actions.appendChild(gearBtn);
       menu.style.backdropFilter = 'blur(6px)';
       actions.appendChild(menu);
     }
-      // Helper row wrapper
-      const makeRow = (labelText, node) => {
+
+    // Helper row wrapper
+    const makeRow = (labelText, node) => {
       const row = document.createElement('div');
       row.style.display = 'flex';
       row.style.alignItems = 'center';
