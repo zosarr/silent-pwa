@@ -1033,21 +1033,8 @@ if (!menu) {
   menu.style.backdropFilter = 'blur(6px)';
   actions.appendChild(menu);
 }
-  // stile tasti dentro il menu: grigio più scuro
-  const styleButtons = () => {
-    menu.querySelectorAll('button').forEach(btn => {
-      if (btn.id === 'settingsBtn') return; // non toccare l’icona ingranaggio
-      btn.style.background = '#666';
-      btn.style.color = '#fff';   // testo chiaro per contrasto sul grigio scuro
-      btn.style.border = '1px solid #555';
-      btn.style.borderRadius = '10px';
-      btn.style.padding = '6px 10px';
-    });
-    }
-
-
-    // Helper row wrapper
-    const makeRow = (labelText, node) => {
+      // Helper row wrapper
+      const makeRow = (labelText, node) => {
       const row = document.createElement('div');
       row.style.display = 'flex';
       row.style.alignItems = 'center';
