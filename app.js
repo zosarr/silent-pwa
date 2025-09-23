@@ -1043,19 +1043,7 @@ if (!menu) {
       btn.style.borderRadius = '10px';
       btn.style.padding = '6px 10px';
     });
-    // opzionale: resa del select coerente con il tema
-    menu.querySelectorAll('select').forEach(sel => {
-      sel.style.background = '#eee';
-      sel.style.color = '#000';
-      sel.style.border = '1px solid #bbb';
-      sel.style.borderRadius = '8px';
-      sel.style.padding = '4px 6px';
-    });
-  };
-  // applica subito e quando cambia il contenuto del menu
-  styleButtons();
-  new MutationObserver(styleButtons).observe(menu, { childList: true, subtree: true });
-}
+    
 
 
     // Helper row wrapper
