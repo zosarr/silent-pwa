@@ -1032,7 +1032,7 @@ if (!menu) {
   menu.style.minWidth = '240px';
   menu.style.backdropFilter = 'blur(6px)';
   actions.appendChild(menu);
-
+}
   // stile tasti dentro il menu: grigio più scuro
   const styleButtons = () => {
     menu.querySelectorAll('button').forEach(btn => {
@@ -1044,7 +1044,7 @@ if (!menu) {
       btn.style.padding = '6px 10px';
     });
     }
-}
+
 
     // Helper row wrapper
     const makeRow = (labelText, node) => {
