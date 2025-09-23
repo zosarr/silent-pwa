@@ -1012,27 +1012,25 @@ const clearBtn = document.getElementById('clearBtn');
 if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
 else actions.appendChild(gearBtn);
 
-// Create menu container if not present
-let menu = document.getElementById('settingsMenu');
-if (!menu) {
-  menu = document.createElement('div');
-  menu.id = 'settingsMenu';
-  menu.setAttribute('role', 'menu');
-  menu.style.display = 'none';
-  menu.style.position = 'absolute';
-  menu.style.top = '100%';
-  menu.style.right = '0';
-  // sfondo grigio
-  menu.style.background = 'rgba(200,200,200,0.95)';
-  // scritte nere
-  menu.style.color = '#000';
-  menu.style.padding = '10px';
-  menu.style.borderRadius = '12px';
-  menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.15)';
-  menu.style.minWidth = '240px';
-  menu.style.backdropFilter = 'blur(6px)';
-  actions.appendChild(menu);
-}
+ // Create menu container if not present
+    let menu = document.getElementById('settingsMenu');
+    if (!menu) {
+      menu = document.createElement('div');
+      menu.id = 'settingsMenu';
+      menu.setAttribute('role', 'menu');
+      menu.style.display = 'none';
+      menu.style.position = 'absolute';
+      menu.style.top = '100%';
+      menu.style.right = '0';
+      menu.style.background = 'rgba(60,60,60,0.95)';
+      menu.style.color = '#fff';
+      menu.style.padding = '10px';
+      menu.style.borderRadius = '12px';
+      menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.25)';
+      menu.style.minWidth = '240px';
+      menu.style.backdropFilter = 'blur(6px)';
+      actions.appendChild(menu);
+    }
       // Helper row wrapper
       const makeRow = (labelText, node) => {
       const row = document.createElement('div');
