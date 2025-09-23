@@ -1043,8 +1043,8 @@ if (!menu) {
       btn.style.borderRadius = '10px';
       btn.style.padding = '6px 10px';
     });
-    
-
+    }
+}
 
     // Helper row wrapper
     const makeRow = (labelText, node) => {
