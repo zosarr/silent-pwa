@@ -1087,10 +1087,10 @@ if (!menu) {
       try {
         // try to reflect current state if available
         const be = (localStorage.getItem('beepEnabled') === '1');
-        bipBtn.textContent = be ? 'Bip: ON' : 'Bip: OFF';
+        bipBtn.textContent = be ? ': ON' : ': OFF';
         bipBtn.setAttribute('aria-pressed', be ? 'true' : 'false');
       } catch(_) {
-        bipBtn.textContent = 'Bip: OFF';
+        bipBtn.textContent = ': OFF';
         bipBtn.setAttribute('aria-pressed', 'false');
       }
     }
@@ -1111,7 +1111,7 @@ if (!menu) {
     })());
 
     if (bipBtn) {
-      menu.appendChild(makeRow('Suono', bipBtn));
+      menu.appendChild(makeRow('Notifica', bipBtn));
     }
 
     if (installBtn) {
