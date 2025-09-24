@@ -998,13 +998,8 @@ window.addEventListener('DOMContentLoaded', () => {
       gearBtn.textContent = '⚙️';
     }
 
-    // Find Clear button (must remain outside)
-    const clearBtn = document.getElementById('clearBtn');
-
-    // Insert gear before "Pulisci" so Pulisci stays outside
-    if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
-    else actions.appendChild(gearBtn);
-
+    
+// inizio
 
 // Create menu container if not present
 let menu = document.getElementById('settingsMenu');
@@ -1046,7 +1041,14 @@ const styleButtons = () => {
     sel.style.padding = '4px 6px';
   });
 };
+//--------------------------------------------
+  // Find Clear button (must remain outside)
+    const clearBtn = document.getElementById('clearBtn');
 
+    // Insert gear before "Pulisci" so Pulisci stays outside
+    if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
+    else actions.appendChild(gearBtn);
+  //--------------------------------------------
   styleButtons();
   new MutationObserver(styleButtons).observe(menu, { childList: true, subtree: true });
 }
