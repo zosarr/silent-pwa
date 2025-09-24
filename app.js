@@ -1106,14 +1106,7 @@ if (!menu) {
 
     menu.appendChild((()=>{
       const hr = document.createElement('div');
-      hr.style.height = '1px'; hr.style.background = 'rgba(200,200,200,0.95)'; hr.style.margin = '6px 0';
-      menu.style.color = '#000';
-  menu.style.padding = '10px';
-  menu.style.borderRadius = '12px';
-  menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.15)';
-  menu.style.minWidth = '240px';
-  menu.style.backdropFilter = 'blur(6px)';
-  actions.appendChild(menu);
+      hr.style.height = '1px'; hr.style.background = 'rgba(255,255,255,.15)'; hr.style.margin = '6px 0';
       return hr;
     })());
 
