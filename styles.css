@@ -228,3 +228,11 @@ details:not([open]) #fp-box { display: none !important; }
 .ios-install-content{max-width:860px;margin:0 auto}
 .ios-install-content p{margin:6px 0 10px}
 .ios-share{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:#fff}
+
+/* aumenta la dimensione dell’icona ingranaggio */
+#settingsBtn{
+  font-size: 24px;   /* prova 24–28px */
+  line-height: 1;    /* evita che “salti” in verticale */
+  padding: 6px 10px; /* ingrandisce l’area di tap */
+}
+
