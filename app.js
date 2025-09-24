@@ -98,7 +98,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('toggleBeepBtn');
     if (!btn) return;
     btn.setAttribute('aria-pressed', beepEnabled ? 'true' : 'false');
-    btn.textContent = beepEnabled ? 'Bip: ON' : 'Bip: OFF';
+    btn.textContent = beepEnabled ? ': ON' : ': OFF';
   }
 
   try {
@@ -1087,10 +1087,10 @@ const styleButtons = () => {
       try {
         // try to reflect current state if available
         const be = (localStorage.getItem('beepEnabled') === '1');
-        bipBtn.textContent = be ? 'Bip: ON' : 'Bip: OFF';
+        bipBtn.textContent = be ? ': ON' : ': OFF';
         bipBtn.setAttribute('aria-pressed', be ? 'true' : 'false');
       } catch(_) {
-        bipBtn.textContent = 'Bip: OFF';
+        bipBtn.textContent = ': OFF';
         bipBtn.setAttribute('aria-pressed', 'false');
       }
     }
@@ -1111,7 +1111,7 @@ const styleButtons = () => {
     })());
 
     if (bipBtn) {
-      menu.appendChild(makeRow('Suono', bipBtn));
+      menu.appendChild(makeRow('Notifiche', bipBtn));
     }
 
     if (installBtn) {
