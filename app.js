@@ -98,7 +98,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('toggleBeepBtn');
     if (!btn) return;
     btn.setAttribute('aria-pressed', beepEnabled ? 'true' : 'false');
-    btn.textContent = beepEnabled ? ': ON' : ': OFF';
+    btn.textContent = beepEnabled ? 'Bip: ON' : 'Bip: OFF';
   }
 
   try {
@@ -1005,52 +1005,25 @@ window.addEventListener('DOMContentLoaded', () => {
     if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
     else actions.appendChild(gearBtn);
 
-
-// Create menu container if not present
-let menu = document.getElementById('settingsMenu');
-if (!menu) {
-  menu = document.createElement('div');
-  menu.id = 'settingsMenu';
-  menu.setAttribute('role', 'menu');
-  menu.style.display = 'none';
-  menu.style.position = 'absolute';
-  menu.style.top = '100%';
-  menu.style.right = '0';
-  // sfondo grigio
-  menu.style.background = 'rgba(200,200,200,0.95)';
-  // scritte nere
-  menu.style.color = '#000';
-  menu.style.padding = '10px';
-  menu.style.borderRadius = '12px';
-  menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.15)';
-  menu.style.minWidth = '240px';
-  menu.style.backdropFilter = 'blur(6px)';
-  actions.appendChild(menu);
-
- // stile tasti dentro il menu: testo nero + grigio chiaro
-const styleButtons = () => {
-  menu.querySelectorAll('button').forEach(btn => {
-    if (btn.id === 'settingsBtn') return; // non toccare l’icona ingranaggio
-    btn.style.background = '#e6e6e6';   // grigio chiaro
-    btn.style.color = '#000';           // scritte nere
-    btn.style.border = '1px solid #c7c7c7';
-    btn.style.borderRadius = '10px';
-    btn.style.padding = '6px 10px';
-  });
-
-  menu.querySelectorAll('select').forEach(sel => {
-    sel.style.background = '#f2f2f2';   // grigio chiaro per il select
-    sel.style.color = '#000';           // scritte nere
-    sel.style.border = '1px solid #c7c7c7';
-    sel.style.borderRadius = '8px';
-    sel.style.padding = '4px 6px';
-  });
-};
-
-  styleButtons();
-  new MutationObserver(styleButtons).observe(menu, { childList: true, subtree: true });
-}
-
+    // Create menu container if not present
+    let menu = document.getElementById('settingsMenu');
+    if (!menu) {
+      menu = document.createElement('div');
+      menu.id = 'settingsMenu';
+      menu.setAttribute('role', 'menu');
+      menu.style.display = 'none';
+      menu.style.position = 'absolute';
+      menu.style.top = '100%';
+      menu.style.right = '0';
+      menu.style.background = 'rgba(0,0,0,0.9)';
+      menu.style.color = '#fff';
+      menu.style.padding = '10px';
+      menu.style.borderRadius = '12px';
+      menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.25)';
+      menu.style.minWidth = '240px';
+      menu.style.backdropFilter = 'blur(6px)';
+      actions.appendChild(menu);
+    }
 
     // Helper row wrapper
     const makeRow = (labelText, node) => {
@@ -1084,10 +1057,10 @@ const styleButtons = () => {
       try {
         // try to reflect current state if available
         const be = (localStorage.getItem('beepEnabled') === '1');
-        bipBtn.textContent = be ? ': ON' : ': OFF';
+        bipBtn.textContent = be ? 'Bip: ON' : 'Bip: OFF';
         bipBtn.setAttribute('aria-pressed', be ? 'true' : 'false');
       } catch(_) {
-        bipBtn.textContent = ': OFF';
+        bipBtn.textContent = 'Bip: OFF';
         bipBtn.setAttribute('aria-pressed', 'false');
       }
     }
@@ -1108,7 +1081,7 @@ const styleButtons = () => {
     })());
 
     if (bipBtn) {
-      menu.appendChild(makeRow('Notifica', bipBtn));
+      menu.appendChild(makeRow('Suono', bipBtn));
     }
 
     if (installBtn) {
@@ -1120,7 +1093,21 @@ const styleButtons = () => {
       menu.appendChild(makeRow('App', installBtn));
     }
 
-    // Toggle open/close
+    
+
+    // --- Move "Pulisci" into settings and rename to "Svuota chat"
+    (function(){
+      const clearInside = document.getElementById('clearBtn');
+      if (clearInside) {
+        try { clearInside.textContent = 'Svuota chat'; } catch(_) {}
+        // separator
+        menu.appendChild((()=>{ const hr = document.createElement('div'); hr.style.height='1px'; hr.style.background='rgba(0,0,0,.15)'; hr.style.margin='6px 0'; return hr; })());
+        // add row with just the button (no label to avoid duplication)
+        menu.appendChild(makeRow('', clearInside));
+      }
+    })();
+
+// Toggle open/close
     function closeMenu(){ menu.style.display='none'; gearBtn.setAttribute('aria-expanded','false'); }
     function openMenu(){ menu.style.display='block'; gearBtn.setAttribute('aria-expanded','true'); }
 
