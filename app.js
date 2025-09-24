@@ -1001,9 +1001,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // Find Clear button (must remain outside)
     const clearBtn = document.getElementById('clearBtn');
 
-    
-    if (clearBtn) { try { clearBtn.textContent = 'scuota chat'; } catch(_) {} }
-// Insert gear before "Pulisci" so Pulisci stays outside
+    // Insert gear before "Pulisci" so Pulisci stays outside
     if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
     else actions.appendChild(gearBtn);
 
@@ -1122,7 +1120,19 @@ const styleButtons = () => {
       menu.appendChild(makeRow('App', installBtn));
     }
 
-    // Toggle open/close
+    // --- Move "Pulisci" into settings and rename to "Svuota chat"
+    (function(){
+      const clearInside = document.getElementById('clearBtn');
+      if (clearInside) {
+        try { clearInside.textContent = 'Svuota chat'; } catch(_) {}
+        // separator
+        menu.appendChild((()=>{ const hr = document.createElement('div'); hr.style.height='1px'; hr.style.background='rgba(0,0,0,.15)'; hr.style.margin='6px 0'; return hr; })());
+        // add row with just the button (no label to avoid duplication)
+        menu.appendChild(makeRow('', clearInside));
+      }
+    })();
+
+// Toggle open/close
     function closeMenu(){ menu.style.display='none'; gearBtn.setAttribute('aria-expanded','false'); }
     function openMenu(){ menu.style.display='block'; gearBtn.setAttribute('aria-expanded','true'); }
 
