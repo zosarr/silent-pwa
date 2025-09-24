@@ -98,7 +98,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('toggleBeepBtn');
     if (!btn) return;
     btn.setAttribute('aria-pressed', beepEnabled ? 'true' : 'false');
-    btn.textContent = beepEnabled ? 'Bip: ON' : 'Bip: OFF';
+    btn.textContent = beepEnabled ? ': ON' : ': OFF';
   }
 
   try {
@@ -1090,7 +1090,7 @@ if (!menu) {
         bipBtn.textContent = be ? ': ON' : ': OFF';
         bipBtn.setAttribute('aria-pressed', be ? 'true' : 'false');
       } catch(_) {
-        bipBtn.textContent = 'Bip: OFF';
+        bipBtn.textContent = ': OFF';
         bipBtn.setAttribute('aria-pressed', 'false');
       }
     }
