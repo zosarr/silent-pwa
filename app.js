@@ -1001,58 +1001,29 @@ window.addEventListener('DOMContentLoaded', () => {
     // Find Clear button (must remain outside)
     const clearBtn = document.getElementById('clearBtn');
 
-   // Find Clear button (must remain outside)
-const clearBtn = document.getElementById('clearBtn');
+    // Insert gear before "Pulisci" so Pulisci stays outside
+    if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
+    else actions.appendChild(gearBtn);
 
-// Insert gear before "Pulisci" so Pulisci stays outside
-if (clearBtn) actions.insertBefore(gearBtn, clearBtn);
-else actions.appendChild(gearBtn);
-
-// Create menu container if not present
-let menu = document.getElementById('settingsMenu');
-if (!menu) {
-  menu = document.createElement('div');
-  menu.id = 'settingsMenu';
-  menu.setAttribute('role', 'menu');
-  menu.style.display = 'none';
-  menu.style.position = 'absolute';
-  menu.style.top = '100%';
-  menu.style.right = '0';
-  // sfondo grigio
-  menu.style.background = 'rgba(200,200,200,0.95)';
-  // scritte nere
-  menu.style.color = '#000';
-  menu.style.padding = '10px';
-  menu.style.borderRadius = '12px';
-  menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.15)';
-  menu.style.minWidth = '240px';
-  menu.style.backdropFilter = 'blur(6px)';
-  actions.appendChild(menu);
-
-  // stile tasti dentro il menu: grigio più scuro
-  const styleButtons = () => {
-    menu.querySelectorAll('button').forEach(btn => {
-      if (btn.id === 'settingsBtn') return; // non toccare l’icona ingranaggio
-      btn.style.background = '#666';
-      btn.style.color = '#fff';   // testo chiaro per contrasto sul grigio scuro
-      btn.style.border = '1px solid #555';
-      btn.style.borderRadius = '10px';
-      btn.style.padding = '6px 10px';
-    });
-    // opzionale: resa del select coerente con il tema
-    menu.querySelectorAll('select').forEach(sel => {
-      sel.style.background = '#eee';
-      sel.style.color = '#000';
-      sel.style.border = '1px solid #bbb';
-      sel.style.borderRadius = '8px';
-      sel.style.padding = '4px 6px';
-    });
-  };
-  // applica subito e quando cambia il contenuto del menu
-  styleButtons();
-  new MutationObserver(styleButtons).observe(menu, { childList: true, subtree: true });
-}
-
+    // Create menu container if not present
+    let menu = document.getElementById('settingsMenu');
+    if (!menu) {
+      menu = document.createElement('div');
+      menu.id = 'settingsMenu';
+      menu.setAttribute('role', 'menu');
+      menu.style.display = 'none';
+      menu.style.position = 'absolute';
+      menu.style.top = '100%';
+      menu.style.right = '0';
+      menu.style.background = 'rgba(0,0,0,0.9)';
+      menu.style.color = '#fff';
+      menu.style.padding = '10px';
+      menu.style.borderRadius = '12px';
+      menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.25)';
+      menu.style.minWidth = '240px';
+      menu.style.backdropFilter = 'blur(6px)';
+      actions.appendChild(menu);
+    }
 
     // Helper row wrapper
     const makeRow = (labelText, node) => {
