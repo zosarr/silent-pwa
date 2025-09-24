@@ -1090,7 +1090,7 @@ if (!menu) {
         bipBtn.textContent = be ? ': ON' : ': OFF';
         bipBtn.setAttribute('aria-pressed', be ? 'true' : 'false');
       } catch(_) {
-        bipBtn.textContent = ': OFF';
+        bipBtn.textContent = 'Bip: OFF';
         bipBtn.setAttribute('aria-pressed', 'false');
       }
     }
