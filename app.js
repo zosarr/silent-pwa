@@ -999,6 +999,9 @@ window.addEventListener('DOMContentLoaded', () => {
       gearBtn.title = 'Impostazioni';
       gearBtn.setAttribute('aria-expanded', 'false');
       gearBtn.textContent = '⚙️';
+      gearBtn.style.fontSize = '24px';  // prova 24–28px
+      gearBtn.style.lineHeight = '1';
+      gearBtn.style.padding = '6px 10px';
     }
 
     // Find Clear button (must remain outside)
