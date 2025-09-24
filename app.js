@@ -469,8 +469,11 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // ===== I18N & SW =====
-  els.langSel && els.langSel.addEventListener('change', ()=>applyLang(els.langSel.value));
-  applyLang('it');
+  els.langSel && els.langSel.addEventListener('change', ()=>{
+  applyLang(els.langSel.value);
+  try { const _c=document.getElementById('clearBtn'); if (_c) _c.textContent='Svuota chat'; } catch(_) {}
+});
+
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
 
   // ===== Stato Connessione =====
