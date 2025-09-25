@@ -216,7 +216,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
       // UI hint
       if (els.connTitle) {
-        els.connTitle.textContent=': connesso (E2E attiva)';
+        els.connTitle.textContent=': utente connesso (E2E attiva)';
       }
       // ripopola la mia pubblica nel campo se assente
       if (els.myPub && !els.myPub.value) {
@@ -479,14 +479,14 @@ window.addEventListener('DOMContentLoaded', () => {
   // ===== Stato Connessione =====
   function setConnState(connected){
     isConnected = !!connected;
-    const txt = connected ? 'connesso' : 'non connesso';
+    const txt = connected ? 'connesso al server' : 'non connesso al server';
     const color = connected ? '#16a34a' : '#dc2626';
     if (els.connTitle){
       els.connTitle.textContent = `: ${txt}`;
       els.connTitle.style.color=color; els.connTitle.style.fontWeight='700';
     }
     if (els.connStatus){
-      els.connStatus.textContent = connected?'Connesso':'Non connesso';
+      els.connStatus.textContent = connected?'Connesso al server':'Non connesso al server';
       els.connStatus.classList.toggle('connected',connected);
       els.connStatus.classList.toggle('disconnected',!connected);
     }
@@ -584,7 +584,7 @@ window.addEventListener('DOMContentLoaded', () => {
           if (!peerRaw||peerRaw===(myPubExpected||els.myPub?.value||'').trim()) return;
           if (!sessionStarted){ pendingPeerKey=peerRaw; return;}
           await e2e.setPeerPublicKey(peerRaw); e2e.peerPubRawB64=peerRaw;
-          if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
+          if (els.connTitle) els.connTitle.textContent=': utente connesso (E2E attiva)';
           return;
         }
         if (!e2e.ready) return;
@@ -648,7 +648,7 @@ window.addEventListener('DOMContentLoaded', () => {
         console.warn('Cache chiavi non salvata:', err);
       }
 
-      if (els.connTitle) els.connTitle.textContent=': connesso (E2E attiva)';
+      if (els.connTitle) els.connTitle.textContent=': utente connesso (E2E attiva)';
 
     } catch (err) {
       console.error('Errore Avvia sessione:', err);
@@ -907,7 +907,7 @@ window.addEventListener('DOMContentLoaded', () => {
     els.composer.appendChild(stopBtn);
 
     recBtn.addEventListener('click',async ()=>{
-      if (!isConnected||!e2e.ready) return alert('Non connesso o E2E non pronto');
+      if (!isConnected||!e2e.ready) return alert('Non connesso al server o E2E non pronto');
       try{
         mediaStream?.getTracks().forEach(t=>t.stop());
         mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
