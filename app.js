@@ -1062,7 +1062,7 @@ window.addEventListener('DOMContentLoaded', () => {
           if (btn.id === 'settingsBtn') return;
           btn.style.background = '#e6e6e6';
           btn.style.color = '#000';
-          btn.style.border = '1px solid '#c7c7c7';
+          
           btn.style.border = '1px solid #c7c7c7';
           btn.style.borderRadius = '10px';
           btn.style.padding = '6px 10px';
