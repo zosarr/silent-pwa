@@ -592,6 +592,28 @@ window.addEventListener('DOMContentLoaded', () => {
     ws.addEventListener('message',async ev=>{
       try{
         const msg=JSON.parse(ev.data);
+		// === Paracadute licenza ===
+// Se il server o il WS invia un messaggio "license_expired",
+// controlla prima lo stato reale dal backend
+if (msg && msg.type === 'license_expired') {
+  try {
+    const installId = localStorage.getItem('install_id') || '';
+    const lic = await api('/license/status?install_id=' + encodeURIComponent(installId));
+    const now = lic.now ? new Date(lic.now) : new Date();
+    const exp = lic.trial_expires_at ? new Date(lic.trial_expires_at) : null;
+    const expired = lic.status === 'trial' && exp && exp.getTime() <= now.getTime();
+
+    const overlay = document.getElementById('license-overlay');
+    if (overlay) {
+      if (expired && lic.status !== 'pro') overlay.removeAttribute('hidden');
+      else overlay.setAttribute('hidden', '');
+    }
+  } catch (err) {
+    console.warn('Controllo licenza fallito:', err);
+  }
+  return; // interrompe la gestione del messaggio qui
+}
+
         if (msg.type==='ping'){ try{ ws?.send(JSON.stringify({type:'pong'})); }catch(e){} return; }
         if (msg.type==='presence'){ if (typeof msg.peers==='number') updatePeerBadge(msg.peers); return; }
 
