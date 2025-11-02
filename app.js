@@ -1201,29 +1201,36 @@ async function bootstrapLicense(){
 }
 
 function updateLicenseUI(lic) {
-  const overlay  = document.getElementById('license-overlay');
+  const overlay   = document.getElementById('license-overlay');
   const demoBadge = document.getElementById('demo-badge');
 
-  const now = new Date(lic.now);
+  // Se la risposta è malformata, non toccare l’UI
+  if (!lic || typeof lic !== 'object') return;
+
+  const now     = lic.now ? new Date(lic.now) : new Date();
   const expires = lic.trial_expires_at ? new Date(lic.trial_expires_at) : null;
 
   const isTrial = lic.status === 'trial';
-  const expired = isTrial && expires && expires <= now;
   const notPro  = lic.status !== 'pro';
+  const expired = Boolean(isTrial && expires && expires.getTime() <= now.getTime());
 
+  // Mostra overlay SOLO se davvero scaduta la trial
   if (overlay) {
     if (expired && notPro) overlay.removeAttribute('hidden');
     else overlay.setAttribute('hidden', '');
   }
 
+  // Badge "Demo" solo se non PRO (sia trial attiva che scaduta)
   if (demoBadge) {
     if (notPro) demoBadge.removeAttribute('hidden');
     else demoBadge.setAttribute('hidden', '');
   }
 
+  // Esporta per debug/limiti
   window.__LICENSE_STATUS__ = lic.status;
   window.__LICENSE_LIMITS__ = lic.limits || {};
 }
+
 
 
 async function initLicense(){
@@ -1255,3 +1262,29 @@ async function initLicense(){
   }catch(_){}
 }
 document.addEventListener('DOMContentLoaded', initLicense);
+document.addEventListener('DOMContentLoaded', () => {
+  const overlay = document.getElementById('license-overlay');
+
+  // Chiudi e resta in demo
+  document.getElementById('demo')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    overlay?.setAttribute('hidden', '');
+  });
+
+  // Acquista: per ora test (sblocca PRO simulando pagamento)
+  document.getElementById('buy')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const installId = localStorage.getItem('install_id') || '';
+    try {
+      await fetch(SERVER_BASE + '/webhooks/payment/test-success', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ install_id: installId })
+      });
+      // Il polling /license/status (o ricarico) aggiornerà a PRO
+    } catch (err) {
+      alert('Errore acquisto/test: ' + (err?.message || err));
+    }
+  });
+});
+
