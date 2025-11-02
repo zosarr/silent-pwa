@@ -1196,21 +1196,31 @@ async function bootstrapLicense(){
   return await api('/license/status?install_id='+install_id);
 }
 
-function updateLicenseUI(lic){
-  const overlay = document.getElementById('license-overlay');
+function updateLicenseUI(lic) {
+  const overlay  = document.getElementById('license-overlay');
   const demoBadge = document.getElementById('demo-badge');
+
   const now = new Date(lic.now);
-  const expired = (lic.status==='trial' && lic.trial_expires_at && new Date(lic.trial_expires_at) <= now);
-  const notPro = (lic.status!=='pro');
+  const expires = lic.trial_expires_at ? new Date(lic.trial_expires_at) : null;
+
+  const isTrial = lic.status === 'trial';
+  const expired = isTrial && expires && expires <= now;
+  const notPro  = lic.status !== 'pro';
+
   if (overlay) {
-    if (expired && notPro) overlay.removeAttribute('hidden'); else overlay.setAttribute('hidden','');
+    if (expired && notPro) overlay.removeAttribute('hidden');
+    else overlay.setAttribute('hidden', '');
   }
+
   if (demoBadge) {
-    if (notPro) demoBadge.removeAttribute('hidden'); else demoBadge.setAttribute('hidden','');
+    if (notPro) demoBadge.removeAttribute('hidden');
+    else demoBadge.setAttribute('hidden', '');
   }
-  window.__LICENSE_LIMITS__ = lic.limits || {};
+
   window.__LICENSE_STATUS__ = lic.status;
+  window.__LICENSE_LIMITS__ = lic.limits || {};
 }
+
 
 async function initLicense(){
   const lic = await bootstrapLicense();
