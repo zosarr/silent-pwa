@@ -14,20 +14,25 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div id="license-overlay" hidden style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0008;z-index:9999;">
+<!-- OVERLAY -->
+<div id="license-overlay" hidden
+     style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0008;z-index:9999;">
   <div style="background:#fff;padding:24px;max-width:520px;border-radius:16px;text-align:center">
     <h2 style="margin:0 0 8px">Il periodo di prova è terminato</h2>
     <p style="margin:0 0 16px">L'app è in modalità demo finché non acquisti la versione completa.</p>
     <div style="display:flex;gap:8px;justify-content:center">
-      <a id="buy" class="btn" href="#" onclick="window.open('https://checkout.example.com?install_id='+localStorage.getItem('install_id'),'_blank')">Acquista</a>
-      <button id="demo" class="btn" onclick="document.getElementById('license-overlay').setAttribute('hidden','')">Continua in demo</button>
+      <a id="buy" class="btn" href="#">Acquista</a>
+      <button id="demo" class="btn">Continua in demo</button>
     </div>
   </div>
 </div>
 
-<div id="demo-badge" hidden style="position:fixed;bottom:12px;right:12px;background:#111;color:#fff;padding:6px 10px;border-radius:8px;opacity:.85;z-index:9999">
+<!-- BADGE DEMO -->
+<div id="demo-badge" hidden
+     style="position:fixed;bottom:12px;right:12px;background:#111;color:#fff;padding:6px 10px;border-radius:8px;opacity:.85;z-index:9999">
   Demo attiva
 </div>
+
 
   <header>
     <div class="brand">
