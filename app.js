@@ -1221,12 +1221,10 @@ async function bootstrapLicense(){
   } catch(e) { console.error('register failed', e); }
   return await api('/license/status?install_id='+install_id);
 }
-
 function updateLicenseUI(lic) {
   const overlay   = document.getElementById('license-overlay');
   const demoBadge = document.getElementById('demo-badge');
 
-  // Se la risposta è malformata, non toccare l’UI
   if (!lic || typeof lic !== 'object') return;
 
   const now     = lic.now ? new Date(lic.now) : new Date();
@@ -1236,25 +1234,18 @@ function updateLicenseUI(lic) {
   const notPro  = lic.status !== 'pro';
   const expired = Boolean(isTrial && expires && expires.getTime() <= now.getTime());
 
-  // Mostra overlay SOLO se davvero scaduta la trial
   if (overlay) {
     if (expired && notPro) overlay.removeAttribute('hidden');
     else overlay.setAttribute('hidden', '');
   }
-
-  // Badge "Demo" solo se non PRO (sia trial attiva che scaduta)
   if (demoBadge) {
     if (notPro) demoBadge.removeAttribute('hidden');
     else demoBadge.setAttribute('hidden', '');
   }
 
-  // Esporta per debug/limiti
   window.__LICENSE_STATUS__ = lic.status;
   window.__LICENSE_LIMITS__ = lic.limits || {};
 }
-
-
-
 async function initLicense(){
   const lic = await bootstrapLicense();
   updateLicenseUI(lic);
