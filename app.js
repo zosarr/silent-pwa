@@ -2,7 +2,8 @@
 
 const SERVER_BASE = (location.hostname === 'localhost')
   ? 'http://localhost:8000'
-  : 'https://<TUO-DOMINIO-BACKEND>';
+  : 'https://silent-backend.onrender.com';
+
 
 import { E2E, fingerprintFromRawBase64 } from './crypto.js';
 import { applyLang } from './i18n.js';
