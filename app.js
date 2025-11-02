@@ -1282,29 +1282,19 @@ async function initLicense(){
   }catch(_){}
 }
 document.addEventListener('DOMContentLoaded', initLicense);
+
 document.addEventListener('DOMContentLoaded', () => {
   const overlay = document.getElementById('license-overlay');
-
-  // Chiudi e resta in demo
   document.getElementById('demo')?.addEventListener('click', (e) => {
     e.preventDefault();
     overlay?.setAttribute('hidden', '');
   });
-
-  // Acquista: per ora test (sblocca PRO simulando pagamento)
-  document.getElementById('buy')?.addEventListener('click', async (e) => {
+  document.getElementById('buy')?.addEventListener('click', (e) => {
     e.preventDefault();
     const installId = localStorage.getItem('install_id') || '';
-    try {
-      await fetch(SERVER_BASE + '/webhooks/payment/test-success', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ install_id: installId })
-      });
-      // Il polling /license/status (o ricarico) aggiornerà a PRO
-    } catch (err) {
-      alert('Errore acquisto/test: ' + (err?.message || err));
-    }
+    // TODO: metti qui la tua pagina di checkout reale
+    window.open('https://checkout.example.com?install_id=' + encodeURIComponent(installId), '_blank');
   });
 });
+
 
