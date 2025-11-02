@@ -1217,10 +1217,17 @@ async function ensureInstallId(){
 async function bootstrapLicense(){
   const install_id = await ensureInstallId();
   try {
+    // registra SEMPRE (idempotente)
     await api('/license/register', { method:'POST', body: JSON.stringify({ install_id }) });
-  } catch(e) { console.error('register failed', e); }
-  return await api('/license/status?install_id='+install_id);
+  } catch (e) {
+    console.warn('register failed, continuo con status:', e);
+  }
+  const lic = await api('/license/status?install_id=' + encodeURIComponent(install_id));
+  updateLicenseUI(lic);
 }
+
+document.addEventListener('DOMContentLoaded', bootstrapLicense);
+
 function updateLicenseUI(lic) {
   const overlay   = document.getElementById('license-overlay');
   const demoBadge = document.getElementById('demo-badge');
