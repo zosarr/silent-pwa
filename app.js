@@ -1200,6 +1200,7 @@ if (lic && typeof lic === 'object') {
 
 // ====== Licensing API helpers (global) ======
 // app.js — rimpiazza TUTTA la funzione api() con questa
+// === API helper ===
 async function api(path, opts) {
   const res = await fetch(SERVER_BASE + path, {
     headers: { 'Content-Type': 'application/json' },
@@ -1207,13 +1208,11 @@ async function api(path, opts) {
   });
 
   if (!res.ok) {
-    // prova a leggere il testo dell'errore per log utili
     let detail = '';
     try { detail = await res.text(); } catch (_) { detail = String(res.status); }
     throw new Error(`API ${path} ${res.status}: ${detail}`);
   }
 
-  // se la risposta non è JSON valido, evita di crashare updateLicenseUI
   try {
     return await res.json();
   } catch (e) {
@@ -1221,32 +1220,91 @@ async function api(path, opts) {
   }
 }
 
-async function ensureInstallId(){
+// === License bootstrap ===
+async function ensureInstallId() {
   let id = localStorage.getItem('install_id');
   if (!id) {
-    id = (crypto.randomUUID && crypto.randomUUID()) || (Date.now().toString(36)+Math.random().toString(36).slice(2));
+    id = (crypto.randomUUID && crypto.randomUUID()) || (Date.now().toString(36) + Math.random().toString(36).slice(2));
     localStorage.setItem('install_id', id);
   }
   return id;
 }
 
+async function bootstrapLicense() {
+  const install_id = await ensureInstallId();
+  try {
+    await api('/license/register', {
+      method: 'POST',
+      body: JSON.stringify({ install_id })
+    });
+  } catch (e) {
+    console.warn('register failed:', e.message);
+  }
 
-async function initLicense(){
+  try {
+    return await api('/license/status?install_id=' + encodeURIComponent(install_id));
+  } catch (e) {
+    console.warn('status failed:', e.message);
+    return null;
+  }
+}
+
+// === UI update ===
+function updateLicenseUI(lic) {
+  const overlay   = document.getElementById('license-overlay');
+  const demoBadge = document.getElementById('demo-badge');
+
+  if (!lic || typeof lic !== 'object') return;
+
+  const now     = lic.now ? new Date(lic.now) : new Date();
+  const expires = lic.trial_expires_at ? new Date(lic.trial_expires_at) : null;
+
+  const isTrial = lic.status === 'trial';
+  const notPro  = lic.status !== 'pro';
+  const expired = Boolean(isTrial && expires && expires.getTime() <= now.getTime());
+
+  // Overlay popup
+  if (overlay) {
+    if (expired && notPro) {
+      overlay.style.display = 'flex';
+      overlay.removeAttribute('hidden');
+    } else {
+      overlay.setAttribute('hidden', '');
+      overlay.style.display = '';
+    }
+  }
+
+  // Badge demo
+  if (demoBadge) {
+    if (notPro) {
+      demoBadge.style.display = 'block';
+      demoBadge.removeAttribute('hidden');
+    } else {
+      demoBadge.setAttribute('hidden', '');
+      demoBadge.style.display = '';
+    }
+  }
+
+  window.__LICENSE_STATUS__ = lic.status;
+  window.__LICENSE_LIMITS__ = lic.limits || {};
+}
+
+// === Init on page load ===
+async function initLicense() {
   try {
     const lic = await bootstrapLicense();
-
-    // ✅ Aggiungi questo controllo PRIMA di chiamare updateLicenseUI
     if (lic && typeof lic === 'object') {
       updateLicenseUI(lic);
     } else {
       console.warn('Licenza non valida o assente:', lic);
     }
-
   } catch (e) {
     console.error('Errore initLicense:', e);
   }
 }
+
 document.addEventListener('DOMContentLoaded', initLicense);
+
 
 
 function updateLicenseUI(lic) {
