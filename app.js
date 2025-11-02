@@ -1,8 +1,11 @@
 // app.js — Silent PWA (testo, foto, audio E2E) con cache chiavi 5 minuti
 
-const SERVER_BASE = (location.hostname === 'localhost')
+window.SERVER_BASE = (location.hostname === 'localhost')
   ? 'http://localhost:8000'
   : 'https://silent-backend.onrender.com';
+
+window.AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
+
 
 
 import { E2E, fingerprintFromRawBase64 } from './crypto.js';
