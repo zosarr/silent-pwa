@@ -1228,31 +1228,35 @@ async function bootstrapLicense(){
 
 document.addEventListener('DOMContentLoaded', bootstrapLicense);
 
-function updateLicenseUI(lic) {
-  const overlay   = document.getElementById('license-overlay');
+function updateLicenseUI(lic){
+  const overlay = document.getElementById('license-overlay');
   const demoBadge = document.getElementById('demo-badge');
+  const now = new Date(lic.now);
+  const expired = (lic.status === 'trial' && lic.trial_expires_at && new Date(lic.trial_expires_at) <= now);
+  const notPro = (lic.status !== 'pro');
 
-  if (!lic || typeof lic !== 'object') return;
-
-  const now     = lic.now ? new Date(lic.now) : new Date();
-  const expires = lic.trial_expires_at ? new Date(lic.trial_expires_at) : null;
-
-  const isTrial = lic.status === 'trial';
-  const notPro  = lic.status !== 'pro';
-  const expired = Boolean(isTrial && expires && expires.getTime() <= now.getTime());
-
-  if (overlay) {
-    if (expired && notPro) overlay.removeAttribute('hidden');
-    else overlay.setAttribute('hidden', '');
-  }
-  if (demoBadge) {
-    if (notPro) demoBadge.removeAttribute('hidden');
-    else demoBadge.setAttribute('hidden', '');
+  // --- overlay (popup fine trial) ---
+  if (expired && notPro) {
+    overlay.style.display = 'flex';        // forza visibilità
+    overlay.removeAttribute('hidden');     // rimuove "hidden"
+  } else {
+    overlay.setAttribute('hidden', '');    // nasconde
+    overlay.style.display = '';            // resetta display inline
   }
 
-  window.__LICENSE_STATUS__ = lic.status;
+  // --- badge demo ---
+  if (notPro) {
+    demoBadge.style.display = 'block';
+    demoBadge.removeAttribute('hidden');
+  } else {
+    demoBadge.setAttribute('hidden', '');
+    demoBadge.style.display = '';
+  }
+
   window.__LICENSE_LIMITS__ = lic.limits || {};
 }
+
+
 async function initLicense(){
   const lic = await bootstrapLicense();
   updateLicenseUI(lic);
@@ -1296,5 +1300,3 @@ document.addEventListener('DOMContentLoaded', () => {
     window.open('https://checkout.example.com?install_id=' + encodeURIComponent(installId), '_blank');
   });
 });
-
-
