@@ -1301,60 +1301,57 @@ async function initLicense(){
     }, 30000);
 
     // Wiring overlay (Acquista/Demo)
-    const overlay = document.getElementById('license-overlay');
-    const buy = document.getElementById('buy');
-	
-    const demo = document.getElementById('demo');
-	
-buy?.addEventListener('click', async (ev) => {
-  ev.preventDefault();
-  const installId = localStorage.getItem('install_id') || '';
-  if (!installId) { alert('Install ID mancante'); return; }
+    // ---- Wiring overlay (UNICO) ----
+(function wireLicenseOverlayOnce() {
+  if (window.__WIRED_LICENSE_OVERLAY__) return;
+  window.__WIRED_LICENSE_OVERLAY__ = true;
 
-  try {
-    const url = window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId);
-    const r = await fetch(url);
-    if (!r.ok) {
-      const txt = await r.text().catch(()=> '');
-      throw new Error(`HTTP ${r.status} ${txt}`);
-    }
-    const data = await r.json();
-    if (data?.approve_url) {
-      // 👇 NIENTE popup: vai direttamente su PayPal nella stessa scheda
-      window.location.assign(data.approve_url);
-    } else {
-      alert('Link di approvazione PayPal mancante.');
-    }
-  } catch (e) {
-    console.error('Errore avvio pagamento:', e);
-    alert('Errore durante la creazione del pagamento.');
-  }
-});
-
-	
-	
-
-
-
-
-
-
-
-    demo?.addEventListener('click', (ev)=>{
-      ev.preventDefault();
-      overlay?.setAttribute('hidden','');
-      overlay && (overlay.style.display = '');
-    });
-  } catch (e) {
-    console.error('Errore initLicense:', e);
-  }
-}
-
-document.addEventListener('DOMContentLoaded', initLicense, { once: true });
-
-
-  document.getElementById('buy')?.addEventListener('click', (e) => {
-    e.preventDefault();
+  function onBuyClick(ev) {
+    ev.preventDefault();
     const installId = localStorage.getItem('install_id') || '';
-    
-  });
+    if (!installId) { alert('Install ID mancante'); return; }
+
+    (async () => {
+      try {
+        const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId));
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()));
+        const data = await r.json();
+        if (data?.approve_url) {
+          // apri PayPal nella stessa scheda (niente tab bianca)
+          window.location.assign(data.approve_url);
+        } else {
+          alert('Link di approvazione PayPal non ricevuto.');
+        }
+      } catch (e) {
+        console.error('Errore avvio pagamento:', e);
+        alert('Errore durante la creazione del pagamento.');
+      }
+    })();
+  }
+
+  function onDemoClick(ev) {
+    ev.preventDefault();
+    const overlay = document.getElementById('license-overlay');
+    overlay?.setAttribute('hidden', '');
+    if (overlay) overlay.style.display = '';
+  }
+
+  // attacca i listener UNA SOLA VOLTA per elemento
+  function setupButtons() {
+    const buy  = document.getElementById('buy');
+    const demo = document.getElementById('demo');
+
+    if (buy && buy.dataset.wired !== '1') {
+      buy.dataset.wired = '1';
+      buy.addEventListener('click', onBuyClick);
+    }
+    if (demo && demo.dataset.wired !== '1') {
+      demo.dataset.wired = '1';
+      demo.addEventListener('click', onDemoClick);
+    }
+  }
+
+  // subito e quando il DOM è pronto
+  setupButtons();
+  document.addEventListener('DOMContentLoaded', setupButtons, { once: true });
+})();
