@@ -1302,9 +1302,10 @@ async function initLicense(){
 
     // Wiring overlay (Acquista/Demo)
     const overlay = document.getElementById('license-overlay');
-    const buy  = document.getElementById('buy');
+    const buy = document.getElementById('buy');
+	
     const demo = document.getElementById('demo');
-	const buy = document.getElementById('buy');
+	
 buy?.addEventListener('click', async (ev) => {
   ev.preventDefault();
   const installId = localStorage.getItem('install_id') || '';
