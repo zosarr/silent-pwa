@@ -1304,39 +1304,36 @@ async function initLicense(){
     const overlay = document.getElementById('license-overlay');
     const buy  = document.getElementById('buy');
     const demo = document.getElementById('demo');
-	
-	
-	
-
+	const buy = document.getElementById('buy');
 buy?.addEventListener('click', async (ev) => {
   ev.preventDefault();
-
   const installId = localStorage.getItem('install_id') || '';
   if (!installId) { alert('Install ID mancante'); return; }
 
-  // Apri subito la scheda: se il popup è bloccato, win sarà null
-  const win = window.open('about:blank', '_blank', 'noopener');
-
   try {
-    const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId));
-    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()));
+    const url = window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId);
+    const r = await fetch(url);
+    if (!r.ok) {
+      const txt = await r.text().catch(()=> '');
+      throw new Error(`HTTP ${r.status} ${txt}`);
+    }
     const data = await r.json();
-    if (!data?.approve_url) throw new Error('approve_url mancante');
-
-    if (win && !win.closed) {
-      // ✅ reindirizza la scheda appena aperta
-      win.location = data.approve_url;
-    } else {
-      // popup bloccato (Edge/PWA): fallback in stessa scheda
+    if (data?.approve_url) {
+      // 👇 NIENTE popup: vai direttamente su PayPal nella stessa scheda
       window.location.assign(data.approve_url);
+    } else {
+      alert('Link di approvazione PayPal mancante.');
     }
   } catch (e) {
     console.error('Errore avvio pagamento:', e);
-    // ❗ chiudi la scheda “bianca” se era stata aperta
-    if (win && !win.closed) win.close();
     alert('Errore durante la creazione del pagamento.');
   }
 });
+
+	
+	
+
+
 
 
 
