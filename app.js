@@ -1305,27 +1305,36 @@ async function initLicense(){
     const buy  = document.getElementById('buy');
     const demo = document.getElementById('demo');
 
-   buy?.addEventListener('click', async (ev) => {
+buy?.addEventListener('click', async (ev) => {
   ev.preventDefault();
-  const btn = ev.currentTarget;
-  btn.disabled = true;
+
+  const id = localStorage.getItem('install_id') || '';
+  if (!id) { alert('Install ID mancante'); return; }
+
+  // Apri subito una scheda “placeholder” legata al gesto utente
+  const win = window.open('about:blank', '_blank');
+
   try {
-    const id = localStorage.getItem('install_id') || '';
     const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(id));
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) {
+      const txt = await r.text().catch(()=> '');
+      throw new Error(`HTTP ${r.status} ${txt}`);
+    }
     const data = await r.json();
-    if (data.approve_url) {
-      window.open(data.approve_url, '_blank'); // PayPal
+    if (data && data.approve_url) {
+      // Reindirizza la scheda già aperta all’URL di approvazione PayPal
+      win.location = data.approve_url;
     } else {
+      win.close();
       alert('Non ho ricevuto il link di approvazione PayPal.');
     }
   } catch (e) {
     console.error('Errore avvio pagamento:', e);
+    if (win && !win.closed) win.close();
     alert('Errore durante la creazione del pagamento.');
-  } finally {
-    btn.disabled = false;
   }
 });
+
 
     demo?.addEventListener('click', (ev)=>{
       ev.preventDefault();
