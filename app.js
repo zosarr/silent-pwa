@@ -1307,20 +1307,42 @@ async function initLicense(){
 
 buy?.addEventListener('click', async (ev) => {
   ev.preventDefault();
-  const id = localStorage.getItem('install_id') || '';
-  const win = window.open('about:blank', '_blank'); // evita popup blocker
+
+  const installId = localStorage.getItem('install_id') || '';
+  if (!installId) { alert('Install ID mancante'); return; }
+
+  // Rileva PWA standalone (Edge può bloccare popups qui)
+  const inStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+  // 1) Se NON siamo in standalone, prova pre-open (popup-safe)
+  const preOpened = inStandalone ? null : window.open('about:blank', '_blank', 'noopener');
+
   try {
-    const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(id));
-    if (!r.ok) throw new Error(await r.text());
+    const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId));
+    if (!r.ok) throw new Error(`HTTP ${r.status} ${await r.text()}`);
     const data = await r.json();
-    if (data.approve_url) win.location = data.approve_url;
-    else { win.close(); alert('Link approvazione PayPal mancante.'); }
+
+    if (!data?.approve_url) throw new Error('approve_url mancante');
+
+    const url = data.approve_url;
+
+    // 2) Se preOpened esiste (non bloccato), reindirizza lì
+    if (preOpened && !preOpened.closed) {
+      preOpened.location = url;
+      return;
+    }
+
+    // 3) Altrimenti, Edge/PWA: naviga nella stessa scheda (è sempre consentito)
+    //   - assign mantiene la history; replace no. Scegli tu.
+    window.location.assign(url);
+
   } catch (e) {
-    console.error(e);
-    if (win && !win.closed) win.close();
-    alert('Errore durante la creazione del pagamento.');
+    console.error('Errore avvio pagamento:', e);
+    if (preOpened && !preOpened.closed) preOpened.close();
+    alert('Non riesco ad aprire PayPal. Controlla blocco pop-up o cookie.');
   }
 });
+
 
 
 
