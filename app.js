@@ -1304,6 +1304,9 @@ async function initLicense(){
     const overlay = document.getElementById('license-overlay');
     const buy  = document.getElementById('buy');
     const demo = document.getElementById('demo');
+	
+	
+	
 
 buy?.addEventListener('click', async (ev) => {
   ev.preventDefault();
@@ -1311,37 +1314,30 @@ buy?.addEventListener('click', async (ev) => {
   const installId = localStorage.getItem('install_id') || '';
   if (!installId) { alert('Install ID mancante'); return; }
 
-  // Rileva PWA standalone (Edge può bloccare popups qui)
-  const inStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-
-  // 1) Se NON siamo in standalone, prova pre-open (popup-safe)
-  const preOpened = inStandalone ? null : window.open('about:blank', '_blank', 'noopener');
+  // Apri subito la scheda: se il popup è bloccato, win sarà null
+  const win = window.open('about:blank', '_blank', 'noopener');
 
   try {
     const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId));
-    if (!r.ok) throw new Error(`HTTP ${r.status} ${await r.text()}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()));
     const data = await r.json();
-
     if (!data?.approve_url) throw new Error('approve_url mancante');
 
-    const url = data.approve_url;
-
-    // 2) Se preOpened esiste (non bloccato), reindirizza lì
-    if (preOpened && !preOpened.closed) {
-      preOpened.location = url;
-      return;
+    if (win && !win.closed) {
+      // ✅ reindirizza la scheda appena aperta
+      win.location = data.approve_url;
+    } else {
+      // popup bloccato (Edge/PWA): fallback in stessa scheda
+      window.location.assign(data.approve_url);
     }
-
-    // 3) Altrimenti, Edge/PWA: naviga nella stessa scheda (è sempre consentito)
-    //   - assign mantiene la history; replace no. Scegli tu.
-    window.location.assign(url);
-
   } catch (e) {
     console.error('Errore avvio pagamento:', e);
-    if (preOpened && !preOpened.closed) preOpened.close();
-    alert('Non riesco ad aprire PayPal. Controlla blocco pop-up o cookie.');
+    // ❗ chiudi la scheda “bianca” se era stata aperta
+    if (win && !win.closed) win.close();
+    alert('Errore durante la creazione del pagamento.');
   }
 });
+
 
 
 
