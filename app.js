@@ -1307,19 +1307,23 @@ async function initLicense(){
 
    buy?.addEventListener('click', async (ev) => {
   ev.preventDefault();
-  const id = localStorage.getItem('install_id') || '';
+  const btn = ev.currentTarget;
+  btn.disabled = true;
   try {
+    const id = localStorage.getItem('install_id') || '';
     const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(id));
     if (!r.ok) throw new Error(await r.text());
     const data = await r.json();
     if (data.approve_url) {
-      window.open(data.approve_url, '_blank'); // apre la pagina PayPal
+      window.open(data.approve_url, '_blank'); // PayPal
     } else {
       alert('Non ho ricevuto il link di approvazione PayPal.');
     }
   } catch (e) {
     console.error('Errore avvio pagamento:', e);
     alert('Errore durante la creazione del pagamento.');
+  } finally {
+    btn.disabled = false;
   }
 });
 
@@ -1342,4 +1346,3 @@ document.addEventListener('DOMContentLoaded', initLicense, { once: true });
     // TODO: metti qui la tua pagina di checkout reale
     window.open('https://checkout.example.com?install_id=' + encodeURIComponent(installId), '_blank');
   });
-
