@@ -1354,4 +1354,4 @@ async function initLicense(){
   // subito e quando il DOM è pronto
   setupButtons();
   document.addEventListener('DOMContentLoaded', setupButtons, { once: true });
-})();
+
