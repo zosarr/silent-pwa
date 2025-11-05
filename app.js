@@ -1352,6 +1352,5 @@ document.addEventListener('DOMContentLoaded', initLicense, { once: true });
   document.getElementById('buy')?.addEventListener('click', (e) => {
     e.preventDefault();
     const installId = localStorage.getItem('install_id') || '';
-    // TODO: metti qui la tua pagina di checkout reale
-    window.open('https://checkout.example.com?install_id=' + encodeURIComponent(installId), '_blank');
+    
   });
