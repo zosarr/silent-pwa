@@ -1330,7 +1330,7 @@ async function initLicense(){
   }
 
   // ---- Wiring overlay (UNICO) ----
-(function wireLicenseOverlayOnce() {
+function wireLicenseOverlayOnce() {
   // Evita che il wiring venga eseguito due volte
   if (window.__WIRED_LICENSE_OVERLAY__) return;
   window.__WIRED_LICENSE_OVERLAY__ = true;
@@ -1387,5 +1387,5 @@ async function initLicense(){
   } else {
     setupButtons();
   }
-})(); // 👈 CHIUSURA IIFE (era quella che mancava)
+}(); // 👈 CHIUSURA IIFE (era quella che mancava)
 
