@@ -1379,7 +1379,7 @@ async function initLicense(){
       demo.dataset.wired = '1';
       demo.addEventListener('click', onDemoClick);
     }
-  }
+  
 
   // Esegui subito se il DOM è già pronto, altrimenti aspetta
   if (document.readyState === 'loading') {
