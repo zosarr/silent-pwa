@@ -1329,8 +1329,8 @@ function wireLicenseOverlayOnce() {
     })();
   }
 
-  // ---- Wiring overlay (UNICO) ----
-function wireLicenseOverlayOnce() {
+ // ---- Wiring overlay (UNICO) ----
+(function wireLicenseOverlayOnce() {
   // Evita che il wiring venga eseguito due volte
   if (window.__WIRED_LICENSE_OVERLAY__) return;
   window.__WIRED_LICENSE_OVERLAY__ = true;
@@ -1379,7 +1379,7 @@ function wireLicenseOverlayOnce() {
       demo.dataset.wired = '1';
       demo.addEventListener('click', onDemoClick);
     }
-  
+  }
 
   // Esegui subito se il DOM è già pronto, altrimenti aspetta
   if (document.readyState === 'loading') {
@@ -1387,5 +1387,5 @@ function wireLicenseOverlayOnce() {
   } else {
     setupButtons();
   }
-}(); // 👈 CHIUSURA IIFE (era quella che mancava)
+})(); // 👈 IIFE chiusa correttamente
 
