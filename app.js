@@ -1330,8 +1330,8 @@ function wireLicenseOverlayOnce() {
   }
 
  // ---- Wiring overlay (UNICO) ----
+// ---- Wiring overlay (UNICO) ----
 (function wireLicenseOverlayOnce() {
-  // Evita che il wiring venga eseguito due volte
   if (window.__WIRED_LICENSE_OVERLAY__) return;
   window.__WIRED_LICENSE_OVERLAY__ = true;
 
@@ -1348,7 +1348,6 @@ function wireLicenseOverlayOnce() {
       }
       const data = await r.json();
       if (data?.approve_url) {
-        // Apri PayPal nella STESSA scheda (niente tab bianca)
         window.location.assign(data.approve_url);
       } else {
         alert('Link di approvazione PayPal non ricevuto.');
@@ -1366,7 +1365,6 @@ function wireLicenseOverlayOnce() {
     if (overlay) overlay.style.display = '';
   }
 
-  // Attacca i listener UNA SOLA VOLTA per elemento
   function setupButtons() {
     const buy  = document.getElementById('buy');
     const demo = document.getElementById('demo');
@@ -1381,11 +1379,11 @@ function wireLicenseOverlayOnce() {
     }
   }
 
-  // Esegui subito se il DOM è già pronto, altrimenti aspetta
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', setupButtons, { once: true });
   } else {
     setupButtons();
   }
-})(); // 👈 IIFE chiusa correttamente
+})();
+
 
