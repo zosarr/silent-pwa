@@ -1330,25 +1330,27 @@ function wireLicenseOverlayOnce() {
   }
 
  // ---- Wiring overlay (UNICO) ----
-// ---- Wiring overlay (UNICO) ----
-(function wireLicenseOverlayOnce() {
+// ---- Wiring overlay (unico) ----
+(function wireLicenseOverlayOnce(){
   if (window.__WIRED_LICENSE_OVERLAY__) return;
   window.__WIRED_LICENSE_OVERLAY__ = true;
 
-  async function onBuyClick(ev) {
+  const overlay = document.getElementById('license-overlay');
+  const buy  = document.getElementById('buy');
+  const demo = document.getElementById('demo');
+
+  // Bottone ACQUISTA -> PayPal nella stessa scheda (niente popup “bianco”)
+  buy?.addEventListener('click', async (ev) => {
     ev.preventDefault();
     const installId = localStorage.getItem('install_id') || '';
     if (!installId) { alert('Install ID mancante'); return; }
 
     try {
       const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId));
-      if (!r.ok) {
-        const txt = await r.text().catch(()=> '');
-        throw new Error('HTTP ' + r.status + ' ' + txt);
-      }
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()));
       const data = await r.json();
       if (data?.approve_url) {
-        window.location.assign(data.approve_url);
+        window.location.assign(data.approve_url); // niente tab bianca
       } else {
         alert('Link di approvazione PayPal non ricevuto.');
       }
@@ -1356,34 +1358,16 @@ function wireLicenseOverlayOnce() {
       console.error('Errore avvio pagamento:', e);
       alert('Errore durante la creazione del pagamento.');
     }
-  }
+  });
 
-  function onDemoClick(ev) {
+  // Bottone DEMO -> chiude overlay
+  demo?.addEventListener('click', (ev)=>{
     ev.preventDefault();
-    const overlay = document.getElementById('license-overlay');
-    overlay?.setAttribute('hidden', '');
-    if (overlay) overlay.style.display = '';
-  }
-
-  function setupButtons() {
-    const buy  = document.getElementById('buy');
-    const demo = document.getElementById('demo');
-
-    if (buy && buy.dataset.wired !== '1') {
-      buy.dataset.wired = '1';
-      buy.addEventListener('click', onBuyClick);
-    }
-    if (demo && demo.dataset.wired !== '1') {
-      demo.dataset.wired = '1';
-      demo.addEventListener('click', onDemoClick);
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupButtons, { once: true });
-  } else {
-    setupButtons();
-  }
+    overlay?.setAttribute('hidden','');
+    overlay && (overlay.style.display = '');
+  });
 })();
+
+
 
 
