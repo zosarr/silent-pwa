@@ -1302,7 +1302,7 @@ async function initLicense(){
 
     // Wiring overlay (Acquista/Demo)
     // ---- Wiring overlay (UNICO) ----
-(function wireLicenseOverlayOnce() {
+function wireLicenseOverlayOnce() {
   if (window.__WIRED_LICENSE_OVERLAY__) return;
   window.__WIRED_LICENSE_OVERLAY__ = true;
 
