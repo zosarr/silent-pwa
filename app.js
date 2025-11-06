@@ -1329,6 +1329,36 @@ async function initLicense(){
     })();
   }
 
+  // ---- Wiring overlay (UNICO) ----
+(function wireLicenseOverlayOnce() {
+  // Evita che il wiring venga eseguito due volte
+  if (window.__WIRED_LICENSE_OVERLAY__) return;
+  window.__WIRED_LICENSE_OVERLAY__ = true;
+
+  async function onBuyClick(ev) {
+    ev.preventDefault();
+    const installId = localStorage.getItem('install_id') || '';
+    if (!installId) { alert('Install ID mancante'); return; }
+
+    try {
+      const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId));
+      if (!r.ok) {
+        const txt = await r.text().catch(()=> '');
+        throw new Error('HTTP ' + r.status + ' ' + txt);
+      }
+      const data = await r.json();
+      if (data?.approve_url) {
+        // Apri PayPal nella STESSA scheda (niente tab bianca)
+        window.location.assign(data.approve_url);
+      } else {
+        alert('Link di approvazione PayPal non ricevuto.');
+      }
+    } catch (e) {
+      console.error('Errore avvio pagamento:', e);
+      alert('Errore durante la creazione del pagamento.');
+    }
+  }
+
   function onDemoClick(ev) {
     ev.preventDefault();
     const overlay = document.getElementById('license-overlay');
@@ -1336,7 +1366,7 @@ async function initLicense(){
     if (overlay) overlay.style.display = '';
   }
 
-  // attacca i listener UNA SOLA VOLTA per elemento
+  // Attacca i listener UNA SOLA VOLTA per elemento
   function setupButtons() {
     const buy  = document.getElementById('buy');
     const demo = document.getElementById('demo');
@@ -1351,7 +1381,11 @@ async function initLicense(){
     }
   }
 
-  // subito e quando il DOM è pronto
-  setupButtons();
-  document.addEventListener('DOMContentLoaded', setupButtons, { once: true });
+  // Esegui subito se il DOM è già pronto, altrimenti aspetta
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupButtons, { once: true });
+  } else {
+    setupButtons();
+  }
+})(); // 👈 CHIUSURA IIFE (era quella che mancava)
 
