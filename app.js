@@ -1329,17 +1329,17 @@ function wireLicenseOverlayOnce() {
     })();
   }
 // ---- Wiring overlay (UNICO) ----
+// Wiring overlay (Acquista/Demo) — definito UNA sola volta
 (function wireLicenseOverlayOnce() {
-  // Evita doppio wiring
   if (window.__WIRED_LICENSE_OVERLAY__) return;
   window.__WIRED_LICENSE_OVERLAY__ = true;
 
   async function onBuyClick(ev) {
     ev.preventDefault();
     const installId = localStorage.getItem('install_id') || '';
-    if (!installId) { 
-      alert('Install ID mancante'); 
-      return; 
+    if (!installId) {
+      alert('Install ID mancante');
+      return;
     }
 
     try {
@@ -1350,9 +1350,9 @@ function wireLicenseOverlayOnce() {
         const txt = await r.text().catch(() => '');
         throw new Error('HTTP ' + r.status + ' ' + txt);
       }
+
       const data = await r.json();
       if (data && data.approve_url) {
-        // PayPal nella stessa scheda (no tab bianca)
         window.location.assign(data.approve_url);
       } else {
         alert('Link di approvazione PayPal non ricevuto.');
@@ -1392,6 +1392,4 @@ function wireLicenseOverlayOnce() {
   } else {
     setupButtons();
   }
-})(); // 👈 IIFE chiusa correttamente, FINE FILE
-
- 
+})();
