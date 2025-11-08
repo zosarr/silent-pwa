@@ -1328,29 +1328,32 @@ function wireLicenseOverlayOnce() {
       }
     })();
   }
-
- // ---- Wiring overlay (UNICO) ----
-// ---- Wiring overlay (unico) ----
-(function wireLicenseOverlayOnce(){
+// ---- Wiring overlay (UNICO) ----
+(function wireLicenseOverlayOnce() {
+  // Evita doppio wiring
   if (window.__WIRED_LICENSE_OVERLAY__) return;
   window.__WIRED_LICENSE_OVERLAY__ = true;
 
-  const overlay = document.getElementById('license-overlay');
-  const buy  = document.getElementById('buy');
-  const demo = document.getElementById('demo');
-
-  // Bottone ACQUISTA -> PayPal nella stessa scheda (niente popup “bianco”)
-  buy?.addEventListener('click', async (ev) => {
+  async function onBuyClick(ev) {
     ev.preventDefault();
     const installId = localStorage.getItem('install_id') || '';
-    if (!installId) { alert('Install ID mancante'); return; }
+    if (!installId) { 
+      alert('Install ID mancante'); 
+      return; 
+    }
 
     try {
-      const r = await fetch(window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId));
-      if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()));
+      const r = await fetch(
+        window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId)
+      );
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '');
+        throw new Error('HTTP ' + r.status + ' ' + txt);
+      }
       const data = await r.json();
-      if (data?.approve_url) {
-        window.location.assign(data.approve_url); // niente tab bianca
+      if (data && data.approve_url) {
+        // PayPal nella stessa scheda (no tab bianca)
+        window.location.assign(data.approve_url);
       } else {
         alert('Link di approvazione PayPal non ricevuto.');
       }
@@ -1358,16 +1361,37 @@ function wireLicenseOverlayOnce() {
       console.error('Errore avvio pagamento:', e);
       alert('Errore durante la creazione del pagamento.');
     }
-  });
+  }
 
-  // Bottone DEMO -> chiude overlay
-  demo?.addEventListener('click', (ev)=>{
+  function onDemoClick(ev) {
     ev.preventDefault();
-    overlay?.setAttribute('hidden','');
-    overlay && (overlay.style.display = '');
-  });
-})();
+    const overlay = document.getElementById('license-overlay');
+    if (overlay) {
+      overlay.setAttribute('hidden', '');
+      overlay.style.display = '';
+    }
+  }
 
+  function setupButtons() {
+    const buy  = document.getElementById('buy');
+    const demo = document.getElementById('demo');
 
+    if (buy && buy.dataset.wired !== '1') {
+      buy.dataset.wired = '1';
+      buy.addEventListener('click', onBuyClick);
+    }
 
+    if (demo && demo.dataset.wired !== '1') {
+      demo.dataset.wired = '1';
+      demo.addEventListener('click', onDemoClick);
+    }
+  }
 
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupButtons, { once: true });
+  } else {
+    setupButtons();
+  }
+})(); // 👈 IIFE chiusa correttamente, FINE FILE
+
+ 
