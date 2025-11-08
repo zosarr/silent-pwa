@@ -1191,13 +1191,10 @@ if (msg && msg.type === 'license_expired') {
 })(); // end settings gear
 
 // ====== Licensing API helpers (global) ======
-// app.js — rimpiazza TUTTA la funzione api() con questa
 
-// ====== Licensing API helpers (global) ======
-
-// API helper robusto
-async function api(path, opts) {
-  const res = await fetch(SERVER_BASE + path, {
+// Usa sempre window.SERVER_BASE, già impostata all'inizio del file
+async function api(path, opts = {}) {
+  const res = await fetch(window.SERVER_BASE + path, {
     headers: { 'Content-Type': 'application/json' },
     ...opts
   });
@@ -1216,25 +1213,32 @@ async function api(path, opts) {
 }
 
 // genera/persisti install_id
-async function ensureInstallId(){
+async function ensureInstallId() {
   let id = localStorage.getItem('install_id');
   if (!id) {
-    id = (crypto.randomUUID && crypto.randomUUID()) || (Date.now().toString(36)+Math.random().toString(36).slice(2));
+    id =
+      (crypto.randomUUID && crypto.randomUUID()) ||
+      (Date.now().toString(36) + Math.random().toString(36).slice(2));
     localStorage.setItem('install_id', id);
   }
   return id;
 }
 
 // registra sempre (idempotente) poi legge lo stato
-async function bootstrapLicense(){
+async function bootstrapLicense() {
   const install_id = await ensureInstallId();
   try {
-    await api('/license/register', { method:'POST', body: JSON.stringify({ install_id }) });
+    await api('/license/register', {
+      method: 'POST',
+      body: JSON.stringify({ install_id })
+    });
   } catch (e) {
     console.warn('register failed:', e.message);
   }
   try {
-    return await api('/license/status?install_id=' + encodeURIComponent(install_id));
+    return await api(
+      '/license/status?install_id=' + encodeURIComponent(install_id)
+    );
   } catch (e) {
     console.warn('status failed:', e.message);
     return null;
@@ -1243,16 +1247,16 @@ async function bootstrapLicense(){
 
 // aggiorna UI in modo sicuro
 function updateLicenseUI(lic) {
-  const overlay   = document.getElementById('license-overlay');
+  const overlay = document.getElementById('license-overlay');
   const demoBadge = document.getElementById('demo-badge');
 
   if (!lic || typeof lic !== 'object') return;
 
-  const now     = lic.now ? new Date(lic.now) : new Date();
+  const now = lic.now ? new Date(lic.now) : new Date();
   const expires = lic.trial_expires_at ? new Date(lic.trial_expires_at) : null;
 
   const isTrial = lic.status === 'trial';
-  const notPro  = lic.status !== 'pro';
+  const notPro = lic.status !== 'pro';
   const expired = Boolean(isTrial && expires && expires.getTime() <= now.getTime());
 
   // Overlay popup
@@ -1261,7 +1265,7 @@ function updateLicenseUI(lic) {
       overlay.style.display = 'flex';
       overlay.removeAttribute('hidden');
     } else {
-      overlay.setAttribute('hidden','');
+      overlay.setAttribute('hidden', '');
       overlay.style.display = '';
     }
   }
@@ -1272,7 +1276,7 @@ function updateLicenseUI(lic) {
       demoBadge.style.display = 'block';
       demoBadge.removeAttribute('hidden');
     } else {
-      demoBadge.setAttribute('hidden','');
+      demoBadge.setAttribute('hidden', '');
       demoBadge.style.display = '';
     }
   }
@@ -1282,7 +1286,7 @@ function updateLicenseUI(lic) {
 }
 
 // bootstrap al load (una volta sola)
-async function initLicense(){
+async function initLicense() {
   try {
     const lic = await bootstrapLicense();
     if (lic && typeof lic === 'object') {
@@ -1290,17 +1294,24 @@ async function initLicense(){
     } else {
       console.warn('Licenza non valida o assente:', lic);
     }
+  } catch (e) {
+    console.warn('Errore initLicense:', e);
+  }
 
-    // Poll ogni 30s per auto-sblocco post-acquisto
-    setInterval(async ()=>{
-      try{
-        const id = localStorage.getItem('install_id') || '';
-        const x = await api('/license/status?install_id=' + encodeURIComponent(id));
-        if (x && typeof x === 'object') updateLicenseUI(x);
-      }catch(e){ console.warn('poll licenza fallito', e); }
-    }, 30000);
+  // Poll ogni 30s per auto-sblocco post-acquisto
+  setInterval(async () => {
+    try {
+      const id = localStorage.getItem('install_id') || '';
+      const x = await api(
+        '/license/status?install_id=' + encodeURIComponent(id)
+      );
+      if (x && typeof x === 'object') updateLicenseUI(x);
+    } catch (e) {
+      console.warn('poll licenza fallito', e);
+    }
+  }, 30000);
+}
 
-// ---- Wiring overlay (UNICO) ----
 // Wiring overlay (Acquista/Demo) — definito UNA sola volta
 (function wireLicenseOverlayOnce() {
   if (window.__WIRED_LICENSE_OVERLAY__) return;
@@ -1316,15 +1327,17 @@ async function initLicense(){
 
     try {
       const r = await fetch(
-        window.SERVER_BASE + '/license/pay/start?install_id=' + encodeURIComponent(installId)
+        window.SERVER_BASE +
+          '/license/pay/start?install_id=' +
+          encodeURIComponent(installId)
       );
       if (!r.ok) {
         const txt = await r.text().catch(() => '');
         throw new Error('HTTP ' + r.status + ' ' + txt);
       }
-
       const data = await r.json();
       if (data && data.approve_url) {
+        // PayPal nella stessa scheda (no tab bianca)
         window.location.assign(data.approve_url);
       } else {
         alert('Link di approvazione PayPal non ricevuto.');
@@ -1345,7 +1358,7 @@ async function initLicense(){
   }
 
   function setupButtons() {
-    const buy  = document.getElementById('buy');
+    const buy = document.getElementById('buy');
     const demo = document.getElementById('demo');
 
     if (buy && buy.dataset.wired !== '1') {
@@ -1365,3 +1378,7 @@ async function initLicense(){
     setupButtons();
   }
 })();
+
+// Avvia init licenza
+initLicense();
+
