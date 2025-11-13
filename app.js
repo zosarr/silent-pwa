@@ -1342,6 +1342,39 @@ async function initLicense() {
     setupButtons();
   }
 })();
+const overlay = document.getElementById('license-overlay');
+const buy  = document.getElementById('buy');
+const demo = document.getElementById('demo');
+buy?.addEventListener('click', async (ev) => {
+  ev.preventDefault();
+  const btn = ev.currentTarget;
+  btn.disabled = true;
+  try {
+    const id = localStorage.getItem('install_id') || '';
+    if (!id) {
+      alert('Install ID mancante');
+      return;
+    }
+
+    const r = await fetch(window.SERVER_BASE + '/license/pay/btcpay/start?install_id=' + encodeURIComponent(id));
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      throw new Error('Errore backend: ' + r.status + ' ' + txt);
+    }
+    const data = await r.json();
+    if (data.checkout_url) {
+      // APRI direttamente il checkout BTCPay
+      window.location.assign(data.checkout_url);
+    } else {
+      alert('Checkout BTCPay non disponibile (manca checkout_url).');
+    }
+  } catch (e) {
+    console.error('Errore avvio pagamento BTCPay:', e);
+    alert('Errore durante la creazione del pagamento.');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // Avvia init licenza
 initLicense();
