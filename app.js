@@ -592,32 +592,32 @@ window.addEventListener('DOMContentLoaded', () => {
     ws.addEventListener('message',async ev=>{
       try{
         const msg=JSON.parse(ev.data);
-		// === Paracadute licenza ===
-// Se il server o il WS invia un messaggio "license_expired",
-// controlla prima lo stato reale dal backend
-// === Paracadute licenza ===
-if (msg && msg.type === 'license_expired') {
-  try {
-    const installId = localStorage.getItem('install_id') || '';
-    const lic = await api('/license/status?install_id=' + encodeURIComponent(installId));
+        // === Paracadute licenza ===
+        // Se il server o il WS invia un messaggio "license_expired",
+        // controlla prima lo stato reale dal backend
+        // === Paracadute licenza ===
+        if (msg && msg.type === 'license_expired') {
+          try {
+            const installId = localStorage.getItem('install_id') || '';
+            const lic = await api('/license/status?install_id=' + encodeURIComponent(installId));
 
-    if (lic && typeof lic === 'object') {
-      const now = lic.now ? new Date(lic.now) : new Date();
-      const exp = lic.trial_expires_at ? new Date(lic.trial_expires_at) : null;
-      const expired = lic.status === 'trial' && exp && exp.getTime() <= now.getTime();
-      const overlay = document.getElementById('license-overlay');
-      if (overlay) {
-        if (expired && lic.status !== 'pro') overlay.removeAttribute('hidden');
-        else overlay.setAttribute('hidden', '');
-      }
-    }
+            if (lic && typeof lic === 'object') {
+              const now = lic.now ? new Date(lic.now) : new Date();
+              const exp = lic.trial_expires_at ? new Date(lic.trial_expires_at) : null;
+              const expired = lic.status === 'trial' && exp && exp.getTime() <= now.getTime();
+              const overlay = document.getElementById('license-overlay');
+              if (overlay) {
+                if (expired && lic.status !== 'pro') overlay.removeAttribute('hidden');
+                else overlay.setAttribute('hidden', '');
+              }
+            }
 
-  } catch (err) {
-    console.warn('Controllo licenza fallito:', err);
-  }
+          } catch (err) {
+            console.warn('Controllo licenza fallito:', err);
+          }
 
-  return; // interrompe la gestione del messaggio qui
-}
+          return; // interrompe la gestione del messaggio qui
+        }
 
 
 
@@ -1312,41 +1312,10 @@ async function initLicense() {
   }, 30000);
 }
 
-// Wiring overlay (Acquista/Demo) — definito UNA sola volta
+// Wiring overlay (solo DEMO, nessun PayPal)
 (function wireLicenseOverlayOnce() {
   if (window.__WIRED_LICENSE_OVERLAY__) return;
   window.__WIRED_LICENSE_OVERLAY__ = true;
-
-  async function onBuyClick(ev) {
-    ev.preventDefault();
-    const installId = localStorage.getItem('install_id') || '';
-    if (!installId) {
-      alert('Install ID mancante');
-      return;
-    }
-
-    try {
-      const r = await fetch(
-        window.SERVER_BASE +
-          '/license/pay/start?install_id=' +
-          encodeURIComponent(installId)
-      );
-      if (!r.ok) {
-        const txt = await r.text().catch(() => '');
-        throw new Error('HTTP ' + r.status + ' ' + txt);
-      }
-      const data = await r.json();
-      if (data && data.approve_url) {
-        // PayPal nella stessa scheda (no tab bianca)
-        window.location.assign(data.approve_url);
-      } else {
-        alert('Link di approvazione PayPal non ricevuto.');
-      }
-    } catch (e) {
-      console.error('Errore avvio pagamento:', e);
-      alert('Errore durante la creazione del pagamento.');
-    }
-  }
 
   function onDemoClick(ev) {
     ev.preventDefault();
@@ -1358,13 +1327,8 @@ async function initLicense() {
   }
 
   function setupButtons() {
-    const buy = document.getElementById('buy');
+    // Ignoriamo eventuale bottone "buy" per evitare funzioni PayPal
     const demo = document.getElementById('demo');
-
-    if (buy && buy.dataset.wired !== '1') {
-      buy.dataset.wired = '1';
-      buy.addEventListener('click', onBuyClick);
-    }
 
     if (demo && demo.dataset.wired !== '1') {
       demo.dataset.wired = '1';
@@ -1381,4 +1345,3 @@ async function initLicense() {
 
 // Avvia init licenza
 initLicense();
-
