@@ -9,9 +9,142 @@ import { applyLang } from './i18n.js';
 
 window.addEventListener('DOMContentLoaded', () => {
   // ===== Config =====
-  const AUTO_WS_URL = 'wss://silent-backend.onrender.com/ws?room=test';
+   // ===== Config =====
+  const AUTO_WS_URL = 'wss://api.silentpwa.com/ws?room=test';
   const qs = new URLSearchParams(location.search);
   const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
+  const API_BASE_URL = (qs.get('api') || 'https://api.silentpwa.com').replace(/\/$/, '');
+
+    // ===== Licenza / BTCPay =====
+  function getInstallId() {
+    try {
+      let id = localStorage.getItem('silent_install_id');
+      if (!id) {
+        if (crypto.randomUUID) {
+          id = crypto.randomUUID();
+        } else {
+          id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+        }
+        localStorage.setItem('silent_install_id', id);
+      }
+      return id;
+    } catch (e) {
+      console.warn('Impossibile usare localStorage per install_id', e);
+      return 'no-storage-' + Date.now().toString(36);
+    }
+  }
+
+  const INSTALL_ID = getInstallId();
+  let licenseStatus = 'unknown';
+  let licensePollTimer = null;
+  let lastLicensePayload = null;
+
+  async function fetchLicenseStatus(showErrors) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/license/status?install_id=${encodeURIComponent(INSTALL_ID)}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const prevStatus = licenseStatus;
+      licenseStatus = data.status;
+      lastLicensePayload = data;
+      updateLicenseOverlay();
+      if (prevStatus !== 'pro' && licenseStatus === 'pro') {
+        console.info('Licenza PRO attivata');
+      }
+    } catch (err) {
+      if (showErrors) {
+        console.error('Errore fetch /license/status', err);
+      }
+    }
+  }
+
+  function isFeatureAllowed(feature) {
+    if (licenseStatus === 'pro') return true;
+    if (licenseStatus === 'trial') return true; // trial = tutto sbloccato
+    // demo
+    if (feature === 'text') return true; // in demo permettiamo solo testo
+    return false;
+  }
+
+  function updateLicenseOverlay() {
+    const overlay = document.getElementById('licenseOverlay');
+    const titleEl = document.getElementById('licenseTitle');
+    const msgEl = document.getElementById('licenseMessage');
+    const extraEl = document.getElementById('licenseCountdown');
+    if (!overlay || !titleEl || !msgEl || !extraEl) return;
+
+    if (licenseStatus === 'pro') {
+      overlay.style.display = 'none';
+      document.body.classList.remove('demo-mode');
+      return;
+    }
+
+    document.body.classList.add('demo-mode');
+
+    let title = '';
+    let msg = '';
+    let extra = '';
+
+    if (licenseStatus === 'trial') {
+      title = 'Trial attivo';
+      msg = 'Hai 24 ore di prova completa prima che l’app passi in modalità DEMO limitata.';
+      if (lastLicensePayload && typeof lastLicensePayload.trial_hours_left === 'number') {
+        const h = Math.max(0, lastLicensePayload.trial_hours_left);
+        extra = `Ore rimanenti: ${h.toFixed(1)}`;
+      }
+      overlay.style.display = 'none'; // niente overlay bloccante durante il trial
+    } else if (licenseStatus === 'demo') {
+      title = 'Modalità DEMO';
+      msg = 'Il periodo di prova è terminato. Alcune funzioni (foto, audio, ecc.) sono limitate finché non attivi la licenza PRO.';
+      overlay.style.display = 'flex';
+    }
+
+    titleEl.textContent = title;
+    msgEl.textContent = msg;
+    extraEl.textContent = extra;
+  }
+
+  async function startBtcpayCheckout() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/license/pay/btcpay/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ install_id: INSTALL_ID })
+      });
+      const data = await res.json();
+      if (data && data.status === 'ok' && data.checkout_url) {
+        window.location.href = data.checkout_url;
+      } else {
+        alert('Errore avvio pagamento. Riprova più tardi.');
+        console.error('Risposta inattesa da /license/pay/btcpay/start', data);
+      }
+    } catch (err) {
+      console.error('Errore avvio pagamento BTCPay', err);
+      alert('Errore di rete durante l’avvio del pagamento.');
+    }
+  }
+
+  function initLicenseUI() {
+    const buyBtn = document.getElementById('licenseBuyBtn');
+    const demoBtn = document.getElementById('licenseDemoBtn');
+    if (buyBtn) buyBtn.addEventListener('click', startBtcpayCheckout);
+    if (demoBtn) demoBtn.addEventListener('click', () => {
+      const overlay = document.getElementById('licenseOverlay');
+      if (overlay) overlay.style.display = 'none';
+    });
+
+    fetchLicenseStatus(true).then(() => {
+      if (licenseStatus === 'demo') {
+        const overlay = document.getElementById('licenseOverlay');
+        if (overlay) overlay.style.display = 'flex';
+      }
+    });
+    licensePollTimer = setInterval(() => fetchLicenseStatus(false), 15000);
+  }
+
+  initLicenseUI();
+
+
 
   // ===== Notifiche, Badge & Bip =====
   let beepEnabled = false;
@@ -798,8 +931,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const IMG_MAX_B64_SAFE = 300_000; // ~225KB effettivi
 
-  async function handleFile(file){
+    async function handleFile(file){
+    if (!isFeatureAllowed('image')) {
+      alert('In modalità DEMO puoi inviare solo messaggi di testo. Passa a PRO per inviare foto.');
+      const overlay = document.getElementById('licenseOverlay');
+      if (overlay && licenseStatus === 'demo') overlay.style.display = 'flex';
+      return;
+    }
     if (!file||!isConnected||!e2e.ready) return;
+
 
     // In demo blocca invio immagini
     if ((window.__LICENSE_STATUS__ || 'trial') !== 'pro') {
@@ -934,13 +1074,15 @@ window.addEventListener('DOMContentLoaded', () => {
     els.composer.appendChild(recBtn);
     els.composer.appendChild(stopBtn);
 
-    recBtn.addEventListener('click',async ()=>{
-      // In demo blocca audio
-      if ((window.__LICENSE_STATUS__ || 'trial') !== 'pro') {
-        alert('La registrazione audio è disponibile solo nella versione PRO.');
+      recBtn.addEventListener('click',async ()=>{
+      if (!isFeatureAllowed('audio')) {
+        alert('In modalità DEMO puoi inviare solo messaggi di testo. Passa a PRO per inviare messaggi audio.');
+        const overlay = document.getElementById('licenseOverlay');
+        if (overlay && licenseStatus === 'demo') overlay.style.display = 'flex';
         return;
       }
       if (!isConnected||!e2e.ready) return alert('Non connesso al server o E2E non pronto');
+
       try{
         mediaStream?.getTracks().forEach(t=>t.stop());
         mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
