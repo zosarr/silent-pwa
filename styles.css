@@ -236,3 +236,63 @@ details:not([open]) #fp-box { display: none !important; }
   padding: 6px 10px; /* ingrandisce l’area di tap */
 }
 
+/* ===== Overlay licenza / BTCPay ===== */
+.license-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.7);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+.license-modal{
+  background:#111827;
+  color:#f9fafb;
+  padding:24px 20px;
+  max-width:420px;
+  width:90%;
+  border-radius:16px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.45);
+}
+.license-modal h2{
+  margin-top:0;
+  margin-bottom:8px;
+  font-size:1.2rem;
+}
+.license-modal p{
+  margin:4px 0;
+}
+.license-countdown{
+  font-size:0.9rem;
+  opacity:0.85;
+}
+.license-buttons{
+  display:flex;
+  gap:12px;
+  margin-top:16px;
+}
+.license-buttons .primary{
+  flex:1;
+  padding:10px 14px;
+  border-radius:999px;
+  border:none;
+  background:#22c55e;
+  color:#052e16;
+  font-weight:600;
+  cursor:pointer;
+}
+.license-buttons .secondary{
+  flex:1;
+  padding:10px 14px;
+  border-radius:999px;
+  border:1px solid rgba(148,163,184,0.7);
+  background:transparent;
+  color:#e5e7eb;
+  font-weight:500;
+  cursor:pointer;
+}
+body.demo-mode main{
+  filter:none;
+}
+
