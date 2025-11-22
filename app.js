@@ -104,25 +104,53 @@ window.addEventListener('DOMContentLoaded', () => {
     extraEl.textContent = extra;
   }
 
-  async function startBtcpayCheckout() {
-    try {
-      const res = await fetch(`${API_BASE_URL}/license/pay/btcpay/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ install_id: INSTALL_ID })
-      });
-      const data = await res.json();
-      if (data && data.status === 'ok' && data.checkout_url) {
-        window.location.href = data.checkout_url;
-      } else {
-        alert('Errore avvio pagamento. Riprova più tardi.');
-        console.error('Risposta inattesa da /license/pay/btcpay/start', data);
-      }
-    } catch (err) {
-      console.error('Errore avvio pagamento BTCPay', err);
-      alert('Errore di rete durante l’avvio del pagamento.');
-    }
+ async function startBtcpayCheckout() {
+  try {
+    const res = await fetch(`https://api.silentpwa.com/payment/create?install_id=${install_id}`);
+    const data = await res.json();
+
+    const btcAddr = data.btc_address;
+    const amount = data.amount_btc;
+
+    // Mostra overlay pagamento
+    const ov = document.getElementById('licenseOverlay');
+    if (ov) ov.removeAttribute('hidden');
+
+    // QR dinamico
+    const qr = document.getElementById('licenseQr');
+    if (qr) qr.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:${btcAddr}?amount=${amount}`;
+
+    // Mostra indirizzo e importo
+    const addr = document.getElementById('licenseAddr');
+    const am = document.getElementById('licenseAmount');
+    if (addr) addr.textContent = btcAddr;
+    if (am) am.textContent = amount + " BTC";
+
+    pollPaymentStatus();
+
+  } catch (err) {
+    console.error('Errore pagamento BTC', err);
+    alert('Errore rete durante pagamento Bitcoin.');
   }
+}
+function pollPaymentStatus() {
+  const timer = setInterval(async () => {
+    try {
+      const res = await fetch(`https://api.silentpwa.com/license/status?install_id=${install_id}`);
+      const data = await res.json();
+
+      if (data.status === "pro") {
+        clearInterval(timer);
+        alert("Pagamento ricevuto! Licenza PRO attivata.");
+        const ov = document.getElementById('licenseOverlay');
+        ov && ov.setAttribute('hidden','');
+        updateLicenseOverlay();
+      }
+
+    } catch (e) { }
+  }, 5000);
+}
+
 
   function initLicenseUI() {
     const buyBtn = document.getElementById('licenseBuyBtn');
