@@ -1399,7 +1399,7 @@ async function initLicense(){
   const lic = await bootstrapLicense();
   updateLicenseUI(lic);
 
-  // Poll licenza ogni 30s per auto-sblocco
+  // Poll licenza ogni 30s
   setInterval(async ()=>{
     try{
       const x = await api('/license/status?install_id='+localStorage.getItem('install_id'));
@@ -1409,20 +1409,37 @@ async function initLicense(){
     }
   }, 30000);
 
-  // === NUOVO OVERLAY (CORRETTO) ===
+  // === BOTTONI OVERLAY NUOVO ===
   const buyBtn = document.getElementById("licenseBuyBtn");
   const demoBtn = document.getElementById("licenseDemoBtn");
 
   if (buyBtn) {
       buyBtn.addEventListener("click", (ev)=>{
           ev.preventDefault();
-          startBtcpayCheckout();   // pagamento BTC
+          startBtcpayCheckout();
       });
   }
 
   if (demoBtn) {
       demoBtn.addEventListener("click", ()=>{
           document.getElementById("licenseOverlay").style.display = "none";
+      });
+  }
+
+  // === FIX OVERLAY VECCHIO (bianco) ===
+  const oldBuy = document.getElementById("buy");
+  if (oldBuy) {
+      oldBuy.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          startBtcpayCheckout();
+      });
+  }
+
+  const oldDemo = document.getElementById("demo");
+  if (oldDemo) {
+      oldDemo.addEventListener("click", () => {
+          const ov = document.getElementById("license-overlay");
+          if (ov) ov.setAttribute("hidden", "");
       });
   }
 }
