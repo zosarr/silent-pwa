@@ -14,6 +14,19 @@ window.addEventListener('DOMContentLoaded', () => {
   const qs = new URLSearchParams(location.search);
   const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
   const API_BASE_URL = (qs.get('api') || 'https://api.silentpwa.com').replace(/\/$/, '');
+  
+  // -------------------------------
+// INSTALLATION ID (unico per ogni dispositivo)
+// -------------------------------
+let install_id = localStorage.getItem("install_id");
+
+if (!install_id) {
+    install_id = crypto.randomUUID();
+    localStorage.setItem("install_id", install_id);
+}
+
+console.log("INSTALL ID:", install_id);
+
 
     // ===== Licenza / BTCPay =====
   function getInstallId() {
