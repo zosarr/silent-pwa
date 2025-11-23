@@ -1399,28 +1399,32 @@ async function initLicense(){
   const lic = await bootstrapLicense();
   updateLicenseUI(lic);
 
-  // poll licenza ogni 30s per auto-sblocco
+  // Poll licenza ogni 30s per auto-sblocco
   setInterval(async ()=>{
     try{
       const x = await api('/license/status?install_id='+localStorage.getItem('install_id'));
       updateLicenseUI(x);
-    }catch(e){ console.warn('poll licenza fallito', e); }
+    }catch(e){ 
+      console.warn('poll licenza fallito', e); 
+    }
   }, 30000);
 
-  // overlay: wire “Acquista” / “Demo”
-  try{
-    const buy = document.getElementById('buy');
-    const demo = document.getElementById('demo');
-    buy && buy.addEventListener('click', (ev)=>{
-      ev.preventDefault();
-      const id = localStorage.getItem('install_id');
-      window.open('https://checkout.example.com?install_id='+encodeURIComponent(id),'_blank');
-    });
-    demo && demo.addEventListener('click', (ev)=>{
-      ev.preventDefault();
-      const ov = document.getElementById('license-overlay');
-      ov && ov.setAttribute('hidden','');
-    });
-  }catch(_){}
+  // === NUOVO OVERLAY (CORRETTO) ===
+  const buyBtn = document.getElementById("licenseBuyBtn");
+  const demoBtn = document.getElementById("licenseDemoBtn");
+
+  if (buyBtn) {
+      buyBtn.addEventListener("click", (ev)=>{
+          ev.preventDefault();
+          startBtcpayCheckout();   // pagamento BTC
+      });
+  }
+
+  if (demoBtn) {
+      demoBtn.addEventListener("click", ()=>{
+          document.getElementById("licenseOverlay").style.display = "none";
+      });
+  }
 }
+
 document.addEventListener('DOMContentLoaded', initLicense);
