@@ -119,42 +119,39 @@ console.log("INSTALL ID:", install_id);
   }
 
 async function startBitcoinPayment() {
+  try {
     const install_id = localStorage.getItem("install_id");
 
-    if (!install_id) {
-        alert("Errore install_id mancante");
-        return;
+    const res = await fetch(`https://api.silentpwa.com/payment/start?install_id=${install_id}`, {
+      method: "POST"
+    });
+
+    const data = await res.json();
+
+    if (!data.btc_address || !data.amount_btc) {
+      alert("Errore: risposta non valida dal server.");
+      return;
     }
 
-    try {
-        const resp = await fetch(`${API_BASE_URL}/payment/start?install_id=${install_id}`, {
-            method: "POST"
-        });
+    const btcAddr = data.btc_address;
+    const amount = data.amount_btc;
 
-        if (!resp.ok) {
-            throw new Error("Errore risposta server");
-        }
+    // Mostra overlay pagamento
+    document.getElementById("licenseOverlay").style.display = "flex";
 
-        const data = await resp.json();
+    // QR dinamico
+    document.getElementById("licenseQr").src =
+      `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:${btcAddr}?amount=${amount}`;
 
-        console.log("PAYMENT RESPONSE:", data);
+    // Mostra indirizzo e importo
+    document.getElementById("licenseAddr").textContent = btcAddr;
+    document.getElementById("licenseAmount").textContent = amount + " BTC";
 
-        // Mostra overlay
-        const ov = document.getElementById("licenseOverlay");
-        ov.style.display = "flex";
-
-        // QR dinamico
-        document.getElementById("licenseQr").src =
-            `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:${data.btc_address}?amount=${data.amount_btc}`;
-
-        // Mostra indirizzo e importo
-        document.getElementById("licenseAddr").textContent = data.btc_address;
-        document.getElementById("licenseAmount").textContent = data.amount_btc + " BTC";
-
-    } catch (err) {
-        console.error("Errore pagamento BTC:", err);
-        alert("Errore di rete durante pagamento Bitcoin");
-    }
+    pollPaymentStatus();
+  } catch (err) {
+    console.error("Errore pagamento BTC", err);
+    alert("Errore rete durante pagamento Bitcoin.");
+  }
 }
 
 function pollPaymentStatus() {
