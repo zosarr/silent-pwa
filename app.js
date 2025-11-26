@@ -1422,7 +1422,8 @@ async function initLicense(){
   // === BOTTONI OVERLAY NUOVO ===
   const buyBtn = document.getElementById("licenseBuyBtn");
   const demoBtn = document.getElementById("licenseDemoBtn");
-document.getElementById("licenseBuyBtn")
+document.getElementById("licenseBuyBtn").onclick = startBitcoinPayment;
+
   .addEventListener("click", startBtcpayCheckout);
 
   if (buyBtn) {
