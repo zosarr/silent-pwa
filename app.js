@@ -176,7 +176,8 @@ function pollPaymentStatus() {
   function initLicenseUI() {
     const buyBtn = document.getElementById('licenseBuyBtn');
     const demoBtn = document.getElementById('licenseDemoBtn');
-    if (buyBtn) buyBtn.addEventListener('click', startBtcpayCheckout);
+  if (buyBtn) buyBtn.onclick = startBitcoinPayment;
+
     if (demoBtn) demoBtn.addEventListener('click', () => {
       const overlay = document.getElementById('licenseOverlay');
       if (overlay) overlay.style.display = 'none';
@@ -1402,39 +1403,59 @@ function updateLicenseUI(lic){
   window.__LICENSE_STATUS__ = lic.status;
 }
 
-async function initLicense(){
+async function initLicense() {
   const lic = await bootstrapLicense();
   updateLicenseUI(lic);
 
   // Poll licenza ogni 30s
-  setInterval(async ()=>{
-    try{
-      const x = await api('/license/status?install_id='+localStorage.getItem('install_id'));
+  setInterval(async () => {
+    try {
+      const x = await api('/license/status?install_id=' + localStorage.getItem('install_id'));
       updateLicenseUI(x);
-    }catch(e){ 
-      console.warn('poll licenza fallito', e); 
+    } catch (e) {
+      console.warn('poll licenza fallito', e);
     }
   }, 30000);
 
   // === BOTTONI OVERLAY NUOVO ===
   const buyBtn = document.getElementById("licenseBuyBtn");
   const demoBtn = document.getElementById("licenseDemoBtn");
-document.getElementById(
 
+  if (buyBtn) buyBtn.onclick = startBitcoinPayment;
   if (demoBtn) {
-      demoBtn.addEventListener("click", ()=>{
-          document.getElementById("licenseOverlay").style.display = "none";
-      });
+    demoBtn.onclick = () => {
+      document.getElementById("licenseOverlay").style.display = "none";
+    };
   }
 
-  async function startBitcoinPayment() {
+  // === FIX OVERLAY VECCHIO ===
+  const oldBuy = document.getElementById("buy");
+  if (oldBuy) oldBuy.onclick = (ev) => {
+    ev.preventDefault();
+    startBitcoinPayment();
+  };
+
+  const oldDemo = document.getElementById("demo");
+  if (oldDemo) oldDemo.onclick = () => {
+    const ov = document.getElementById("license-overlay");
+    if (ov) ov.setAttribute("hidden", "");
+  };
+}
+
+
+// ==============================
+//      FUNZIONE CORRETTA
+// ==============================
+async function startBitcoinPayment() {
   try {
     const install_id = localStorage.getItem("install_id");
-    const res = await fetch(`https://api.silentpwa.com/payment/start?install_id=${install_id}`, {
-      method: "POST"
-    });
-    const data = await res.json();
 
+    const res = await fetch(
+      `https://api.silentpwa.com/payment/start?install_id=${install_id}`,
+      { method: "POST" }
+    );
+
+    const data = await res.json();
     const btcAddr = data.btc_address;
     const amount = data.amount_btc;
 
@@ -1458,23 +1479,6 @@ document.getElementById(
   }
 }
 
-  // === FIX OVERLAY VECCHIO (bianco) ===
-  const oldBuy = document.getElementById("buy");
-  if (oldBuy) {
-      oldBuy.addEventListener("click", (ev) => {
-          ev.preventDefault();
-          startBtcpayCheckout();
-      });
-  }
-
-  const oldDemo = document.getElementById("demo");
-  if (oldDemo) {
-      oldDemo.addEventListener("click", () => {
-          const ov = document.getElementById("license-overlay");
-          if (ov) ov.setAttribute("hidden", "");
-      });
-  }
-}
 
 document.addEventListener('DOMContentLoaded', initLicense);
 
