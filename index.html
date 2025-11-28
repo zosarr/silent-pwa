@@ -19,162 +19,171 @@
 <body>
 
 <div id="demo-badge" hidden
-     style="position:fixed;bottom:12px;right:12px;background:#111;color:#fff;padding:6px 10px;border-radius:8px;opacity:.9;z-index:9999">
-    Demo attiva
+ style="position:fixed;bottom:12px;right:12px;background:#111;color:#fff;
+ padding:6px 10px;border-radius:8px;opacity:.85;z-index:9999">
+ Demo attiva
 </div>
 
 <header>
-    <div class="brand">
-        <img src="icons/1.png" alt="Silent" width="32" height="32">
-        <h1>Silent</h1>
-    </div>
+ <div class="brand">
+   <img src="icons/1.png" alt="Silent" width="32" height="32">
+   <h1>Silent</h1>
+ </div>
 
-    <div class="actions">
-        <select id="langSelect" aria-label="Language">
-            <option value="it">Italiano</option>
-            <option value="en">English</option>
-        </select>
+ <div class="actions">
+   <select id="langSelect" aria-label="Language">
+     <option value="it">Italiano</option>
+     <option value="en">English</option>
+   </select>
 
-        <button id="toggleBeepBtn" class="ghost" aria-pressed="false">Notifica: OFF</button>
-        <button id="installBtn" class="ghost">Install</button>
-        <button id="clearBtn" class="danger" data-i18n="clear">Svuota Chat</button>
-    </div>
+   <button id="toggleBeepBtn" class="ghost" aria-pressed="false">Notifica: OFF</button>
+   <button id="installBtn" class="ghost">Install</button>
+   <button id="clearBtn" class="danger" data-i18n="clear">Svuota Chat</button>
+ </div>
 </header>
 
 <main>
 
 <section class="panel">
-    <h2 class="conn-header">
-        <span data-i18n="connection">:</span>
-        <button id="disconnectBtn" class="ghost danger"
-                style="display:none;margin-left:.5rem;">Disconnetti Utente</button>
-    </h2>
+ <h2 class="conn-header">
+   <span data-i18n="connection">:</span>
+   <button id="disconnectBtn" class="ghost danger"
+     style="display:none;margin-left:.5rem;">Disconnetti Utente</button>
+ </h2>
 
-    <p id="fp-status" class="fp-warn" style="display:none;"></p>
+ <p id="fp-status" class="fp-warn" style="display:none;"></p>
 
-    <div id="connStatus" class="status-box disconnected">Non connesso al server</div>
+ <div id="connStatus" class="status-box disconnected">
+   Non connesso al server
+ </div>
 
-    <details>
-        <summary data-i18n="session">Scambio chiavi</summary>
+ <details>
+  <summary data-i18n="session">Scambio chiavi</summary>
 
-        <div class="grid2">
-            <label>
-                <span data-i18n="myPub">La mia chiave</span>
-                <textarea id="myPub" readonly></textarea>
-                <div class="row">
-                    <button id="copyMyPubBtn">Copia chiave</button>
-                </div>
-            </label>
+  <div class="grid2">
+   <label>
+     <span data-i18n="myPub">La mia chiave</span>
+     <textarea id="myPub" readonly></textarea>
+     <div class="row">
+       <button id="copyMyPubBtn">Copia chiave</button>
+     </div>
+   </label>
 
-            <label>
-                <span data-i18n="peerPub">Chiave utente (incolla)</span>
-                <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
-            </label>
-        </div>
+   <label>
+     <span data-i18n="peerPub">Chiave utente (incolla)</span>
+     <textarea id="peerPub" placeholder="Incolla la chiave dell'altro utente"></textarea>
+   </label>
+  </div>
 
-        <div class="row">
-            <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
-            <small data-i18n="sessionHint">Premi il pulsante per scambiare la chiave e attivare la chat</small>
-        </div>
+  <div class="row">
+   <button id="startSessionBtn" data-i18n="startSession">Avvia sessione</button>
+   <small data-i18n="sessionHint">
+     Premi il pulsante per scambiare la chiave e attivare la chat
+   </small>
+  </div>
 
-        <div id="fp-box" class="fp hidden">
-            <div class="fp-row">
-                <span>Il mio codice:</span>
-                <code id="my-fp"></code>
-                <button id="copy-my-fp" type="button">Copia</button>
-            </div>
-            <div class="fp-row">
-                <span>Codice utente:</span>
-                <code id="peer-fp"></code>
-                <button id="confirm-fp" type="button">Conferma codice</button>
-            </div>
-        </div>
-    </details>
+  <div id="fp-box" class="fp hidden">
+   <div class="fp-row">
+     <span>Il mio codice:</span>
+     <code id="my-fp"></code>
+     <button id="copy-my-fp" type="button">Copia</button>
+   </div>
+
+   <div class="fp-row">
+     <span>Codice utente:</span>
+     <code id="peer-fp"></code>
+     <button id="confirm-fp" type="button">Conferma codice</button>
+   </div>
+  </div>
+
+ </details>
 </section>
 
 <section class="panel">
-    <h2 data-i18n="chat">Chat</h2>
+ <h2 data-i18n="chat">Chat</h2>
 
-    <ul id="log" class="messages" aria-live="polite"></ul>
+ <ul id="log" class="messages" aria-live="polite"></ul>
 
-    <div class="composer">
-        <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
-        <button id="sendBtn" data-i18n="send">Invia</button>
+ <div class="composer">
+   <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
+   <button id="sendBtn" data-i18n="send">Invia</button>
 
-        <!-- Foto -->
-        <button id="photoBtn" class="ghost">📷</button>
+   <!-- FOTO (ID richiesti da app.js) -->
+   <button id="photoBtn" class="ghost">📷</button>
+   <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
+   <input type="file" id="galleryInput" accept="image/*" style="display:none">
 
-        <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
-        <input type="file" id="galleryInput" accept="image/*" style="display:none">
+   <!-- AUDIO (ID richiesti da app.js) -->
+   <button id="recBtn" class="ghost">🎙️</button>
+   <button id="stopBtn" class="ghost danger" disabled>Stop</button>
 
-        <!-- Audio -->
-        <button id="recBtn" class="ghost">🎙️</button>
-        <button id="stopBtn" class="ghost danger" disabled>Stop</button>
+   <!-- MENU FOTO (ID richiesti da app.js) -->
+   <div id="photoMenu"
+        style="display:none;position:absolute;left:50%;top:50%;
+               transform:translate(-50%,-50%);
+               background:#fff;border:1px solid #ccc;border-radius:10px;
+               box-shadow:0 10px 20px rgba(0,0,0,.2);padding:10px;z-index:99999;">
+       <button id="pmCamera" style="display:block;width:160px;margin:6px auto;">📷 Scatta</button>
+       <button id="pmGallery" style="display:block;width:160px;margin:6px auto;">🖼️ Galleria</button>
+       <button id="pmClose"
+               style="display:block;width:160px;margin:6px auto;background:none;color:#666;">
+               Annulla
+       </button>
+   </div>
 
-        <!-- Menu foto -->
-        <div id="photoMenu"
-             style="display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-                    background:#fff;border:1px solid #ccc;border-radius:10px;
-                    box-shadow:0 10px 20px rgba(0,0,0,.2);padding:10px;z-index:99999;">
-            <button id="pmCamera" style="display:block;width:160px;margin:6px auto;">📷 Scatta</button>
-            <button id="pmGallery" style="display:block;width:160px;margin:6px auto;">🖼️ Galleria</button>
-            <button id="pmClose"
-                    style="display:block;width:160px;margin:6px auto;background:none;color:#666;">Annulla</button>
-        </div>
+ </div>
 
-    </div>
-
-    <small data-i18n="autodestruct">
-        I messaggi si autodistruggono 5 minuti dopo la lettura.
-    </small>
+ <small data-i18n="autodestruct">
+   I messaggi si autodistruggono 5 minuti dopo la lettura.
+ </small>
 </section>
 
 <div id="iosInstallBanner" class="ios-install-banner" style="display:none;">
-    <div class="ios-install-content">
-        <strong>Installa su iPhone</strong>
-        <p>Apri il menu <span class="ios-share">Condividi</span> e tocca <strong>Aggiungi a Home</strong>.</p>
+ <div class="ios-install-content">
+   <strong>Installa su iPhone</strong>
+   <p>Apri il menu <span class="ios-share">Condividi</span> e tocca <strong>Aggiungi a Home</strong>.</p>
 
-        <div class="row">
-            <button id="iosInstallDismiss" class="ghost">Non ora</button>
-            <button id="iosInstallHide" class="danger">Non mostrare più</button>
-        </div>
-    </div>
+   <div class="row">
+     <button id="iosInstallDismiss" class="ghost">Non ora</button>
+     <button id="iosInstallHide" class="danger">Non mostrare più</button>
+   </div>
+ </div>
 </div>
 
-<!-- OVERLAY LICENZA NUOVO -->
+<!-- OVERLAY LICENZA (corretto: rimosso il doppio display) -->
 <div id="licenseOverlay"
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);
             z-index:999999;align-items:center;justify-content:center;padding:20px;">
 
-    <div style="background:#111;padding:20px;border-radius:12px;
-                width:90%;max-width:380px;text-align:center;">
+ <div style="background:#111;padding:20px;border-radius:12px;
+             width:90%;max-width:380px;text-align:center;">
 
-        <h2 id="licenseTitle" style="color:#fff;">Modalità PRO</h2>
-        <p id="licenseMessage" style="color:#ccc;"></p>
-        <p id="licenseCountdown" style="color:#ccc;"></p>
+   <h2 id="licenseTitle" style="color:#fff;">Modalità PRO</h2>
+   <p id="licenseMessage" style="color:#ccc;"></p>
+   <p id="licenseCountdown" style="color:#ccc;"></p>
 
-        <img id="licenseQr" src="" style="width:200px;margin:20px auto;display:block;">
+   <img id="licenseQr" src="" style="width:200px;margin:20px auto;display:block;">
 
-        <p style="color:#fff;">Indirizzo BTC:</p>
-        <p id="licenseAddr" style="color:#0f0;word-break:break-all;"></p>
+   <p style="color:#fff;">Indirizzo BTC:</p>
+   <p id="licenseAddr" style="color:#0f0;word-break:break-all;"></p>
 
-        <p style="color:#fff;">Importo:</p>
-        <p id="licenseAmount" style="color:#0f0;"></p>
+   <p style="color:#fff;">Importo:</p>
+   <p id="licenseAmount" style="color:#0f0;"></p>
 
-        <button id="licenseBuyBtn" class="primary" style="width:100%;margin-top:20px;">
-            Acquista PRO
-        </button>
+   <button id="licenseBuyBtn" class="primary" style="width:100%;margin-top:20px;">
+     Acquista PRO
+   </button>
 
-        <button id="licenseDemoBtn" class="secondary" style="width:100%;margin-top:10px;">
-            Continua in demo
-        </button>
-    </div>
+   <button id="licenseDemoBtn" class="secondary" style="width:100%;margin-top:10px;">
+     Continua in demo
+   </button>
+ </div>
 </div>
 
 </main>
 
 <footer>
-    <span>Silent • https://silent-pwa.netlify.app</span>
+ <span>Silent • https://silent-pwa.netlify.app</span>
 </footer>
 
 <script type="module" src="i18n.js"></script>
