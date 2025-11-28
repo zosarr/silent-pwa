@@ -1,6 +1,5 @@
 //----------------------------------------------------
-// Silent PWA - app.js (PARTE 1/2)
-// Riparato, senza placeholder, identico alla logica originale
+// Silent PWA - app.js (NUOVA VERSIONE PULITA) — PARTE 1
 //----------------------------------------------------
 
 import { E2E, fingerprintFromRawBase64 } from './crypto.js';
@@ -10,61 +9,62 @@ import { applyLang } from './i18n.js';
 // CONFIG
 // ------------------------------------------------------
 
-const SERVER_BASE = (location.hostname === 'localhost')
-  ? 'http://localhost:8000'
-  : 'https://api.silentpwa.com';
+const SERVER_BASE =
+    location.hostname === 'localhost'
+        ? 'http://localhost:8000'
+        : 'https://api.silentpwa.com';
 
-const API_BASE_URL = SERVER_BASE;
+const qs = new URLSearchParams(location.search);
+const AUTO_WS_URL = 'wss://api.silentpwa.com/ws?room=test';
+const FORCED_WS = qs.get('ws') || AUTO_WS_URL;
 
-// WebSocket default
-let AUTO_WS_URL = 'wss://api.silentpwa.com/ws?room=test';
-
-// Override via query string
-const urlParams = new URLSearchParams(location.search);
-const FORCED_WS = urlParams.get('ws') || AUTO_WS_URL;
-
-// Install ID unificato
 function getInstallId() {
-  try {
-    let id = localStorage.getItem('silent_install_id');
-    if (!id) {
-      id = crypto.randomUUID
-        ? crypto.randomUUID()
-        : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
-      localStorage.setItem('silent_install_id', id);
+    try {
+        let id = localStorage.getItem('install_id');
+        if (!id) {
+            id = crypto.randomUUID();
+            localStorage.setItem('install_id', id);
+        }
+        return id;
+    } catch (e) {
+        return 'nostorage-' + Date.now();
     }
-    return id;
-  } catch (e) {
-    console.warn('Install ID fallback (no localStorage):', e);
-    return 'no-storage-' + Date.now().toString(36);
-  }
 }
-
 const INSTALL_ID = getInstallId();
 
+const API = (path, opts = {}) =>
+    fetch(`${SERVER_BASE}${path}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+    }).then((r) => r.json());
+
 // ------------------------------------------------------
-// DOM ELEMENTS
+// LANGUAGE
 // ------------------------------------------------------
 
+const langSel = document.getElementById('langSelect');
+langSel.value = localStorage.getItem('lang') || 'it';
+applyLang(langSel.value);
+langSel.onchange = () => {
+    localStorage.setItem('lang', langSel.value);
+    applyLang(langSel.value);
+};
+
+// ------------------------------------------------------
+// ELEMENTS
+// ------------------------------------------------------
+
+const $ = (s) => document.querySelector(s);
 const els = {
-  log: document.getElementById('log'),
-  textInput: document.getElementById('textInput'),
-  sendBtn: document.getElementById('sendBtn'),
-  startBtn: document.getElementById('startBtn'),
-  myPub: document.getElementById('myPub'),
-  peerPub: document.getElementById('peerPub'),
-  connState: document.getElementById('connState'),
-  photoBtn: document.getElementById('photoBtn'),
-  audioBtn: document.getElementById('audioBtn'),
-  cameraInput: document.getElementById('cameraInput'),
-  galleryInput: document.getElementById('galleryInput'),
-  photoMenu: document.getElementById('photoMenu'),
-  takePhotoBtn: document.getElementById('takePhotoBtn'),
-  choosePhotoBtn: document.getElementById('choosePhotoBtn'),
-  closePhotoMenu: document.getElementById('closePhotoMenu'),
-  iosBanner: document.getElementById('iosInstallBanner'),
-  iosClose: document.getElementById('iosInstallClose'),
-  iosNever: document.getElementById('iosInstallNever'),
+    myPub: $('#myPub'),
+    peerPub: $('#peerPub'),
+    startBtn: $('#startSessionBtn'),
+    sendBtn: $('#sendBtn'),
+    input: $('#msgInput'),
+    log: $('#log'),
+    connStatus: $('#connStatus'),
+    installBtn: $('#installBtn'),
+    copyMyBtn: $('#copyMyPubBtn'),
 };
 
 // ------------------------------------------------------
@@ -72,719 +72,690 @@ const els = {
 // ------------------------------------------------------
 
 let ws = null;
+let isConnected = false;
 let isConnecting = false;
-let shouldAutoReconnect = true;
+
 let e2e = new E2E();
-
-// session
-let sessionStarted = false;
+let myPubExpected = null;
 let pendingPeerKey = null;
+let sessionStarted = false;
 
-// notifications & badges
-let windowHasFocus = true;
 let unreadCount = 0;
-
-// license
-let licenseStatus = 'unknown';
-let licensePollTimer = null;
-let lastLicensePayload = null;
-
-// audio
-let mediaRecorder = null;
-let audioChunks = [];
-let audioTimer = null;
+let initialTitle = document.title;
 
 // ------------------------------------------------------
-// LANGUAGE
+// BADGE + AUDIO BEEP
 // ------------------------------------------------------
 
-document.getElementById('langSel').value = localStorage.getItem('lang') || 'it';
-applyLang(localStorage.getItem('lang') || 'it');
+let beepEnabled = false;
+let audioCtx = null;
 
-document.getElementById('langSel').addEventListener('change', e => {
-  const lang = e.target.value;
-  localStorage.setItem('lang', lang);
-  applyLang(lang);
-});
-
-// ------------------------------------------------------
-// WINDOW FOCUS (badge e titolo)
-// ------------------------------------------------------
-
-window.addEventListener('focus', () => {
-  windowHasFocus = true;
-  unreadCount = 0;
-  document.title = "Silent";
-  if (navigator.clearAppBadge) navigator.clearAppBadge();
-});
-
-window.addEventListener('blur', () => {
-  windowHasFocus = false;
-});
-
-// ------------------------------------------------------
-// CONNECTION STATUS UI
-// ------------------------------------------------------
-
-function setConnState(online) {
-  els.connState.textContent = online ? "● online" : "● offline";
-  els.connState.style.color = online ? "#0a0" : "#a00";
-}
-
-// ------------------------------------------------------
-// INITIAL LICENSE CHECK
-// ------------------------------------------------------
-
-async function fetchLicenseStatus(showErrors = false) {
-  try {
-    const res = await fetch(
-      `${API_BASE_URL}/license/status?install_id=${encodeURIComponent(INSTALL_ID)}`
-    );
-    const data = await res.json();
-
-    const prev = licenseStatus;
-    licenseStatus = data.status;
-    lastLicensePayload = data;
-
-    updateLicenseOverlay();
-
-    if (prev !== 'pro' && data.status === 'pro') {
-      console.info("Licenza PRO attivata");
+try {
+    if (localStorage.getItem('beepEnabled') === '1') {
+        beepEnabled = true;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
+} catch (e) {}
 
-  } catch (e) {
-    console.warn("Impossibile recuperare licenza:", e);
-    if (showErrors) alert("Errore nel recupero licenza");
-  }
+function playBeep() {
+    if (!beepEnabled) return;
+    try {
+        const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 1000;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+        osc.stop(ctx.currentTime + 0.2);
+    } catch (e) {}
 }
 
-// ------------------------------------------------------
-// LICENSE UI
-// ------------------------------------------------------
-
-function updateLicenseOverlay() {
-  const ov = document.getElementById('licenseOverlay');
-  const title = document.getElementById('licenseTitle');
-  const msg = document.getElementById('licenseMessage');
-  const cd = document.getElementById('licenseCountdown');
-
-  if (!ov) return;
-
-  // PRO
-  if (licenseStatus === 'pro') {
-    ov.style.display = 'none';
-    document.body.classList.remove('demo-mode');
-    return;
-  }
-
-  // TRIAL
-  if (licenseStatus === 'trial') {
-    const hours = lastLicensePayload?.trial_hours_left || 0;
-    title.textContent = "Licenza TRIAL attiva";
-    msg.textContent = "Hai accesso completo all'app.";
-    cd.textContent = "Tempo rimanente: " + hours.toFixed(1) + " ore";
-    ov.style.display = 'flex';
-    return;
-  }
-
-  // DEMO
-  if (licenseStatus === 'demo') {
-    title.textContent = "Modalità DEMO";
-    msg.textContent = "Puoi inviare solo messaggi di testo.";
-    cd.textContent = "";
-    document.body.classList.add('demo-mode');
-    ov.style.display = 'flex';
-    return;
-  }
-
-  // UNKNOWN
-  title.textContent = "Verifica licenza…";
-  msg.textContent = "";
-  cd.textContent = "";
-  ov.style.display = 'flex';
+function setBadge(n) {
+    try {
+        if ('setAppBadge' in navigator) navigator.setAppBadge(n);
+    } catch {}
+    document.title = n ? `(${n}) ${initialTitle}` : initialTitle;
 }
 
-// ------------------------------------------------------
-// PRODUCT LIMITS
-// ------------------------------------------------------
-
-function isFeatureAllowed(feature) {
-  if (licenseStatus === 'pro') return true;
-  if (licenseStatus === 'trial') return true;
-  if (feature === 'text') return true;
-  return false;
+function clearBadge() {
+    unreadCount = 0;
+    setBadge(0);
 }
 
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) clearBadge();
+});
+window.addEventListener('focus', clearBadge);
+
 // ------------------------------------------------------
-// BITCOIN PAYMENT
+// LICENSE SYSTEM
 // ------------------------------------------------------
+
+async function bootstrapLicense() {
+    await API('/license/register', {
+        method: 'POST',
+        body: JSON.stringify({ install_id: INSTALL_ID }),
+    });
+    return API(`/license/status?install_id=${INSTALL_ID}`);
+}
+
+function updateLicenseUI(lic) {
+    const ov = document.getElementById('licenseOverlay');
+    const badge = document.getElementById('demo-badge');
+    const isPro = lic.status === 'pro';
+
+    window.__LICENSE_STATUS__ = lic.status;
+    window.__LICENSE_LIMITS__ = lic.limits || {};
+
+    if (badge) badge.hidden = isPro;
+    if (ov) ov.hidden = isPro;
+}
+
+async function initLicense() {
+    const lic = await bootstrapLicense();
+    updateLicenseUI(lic);
+
+    setInterval(async () => {
+        try {
+            const x = await API(`/license/status?install_id=${INSTALL_ID}`);
+            updateLicenseUI(x);
+        } catch (e) {}
+    }, 30000);
+}
 
 async function startBitcoinPayment() {
-  try {
-    const res = await fetch(
-      `${API_BASE_URL}/payment/start?install_id=${encodeURIComponent(INSTALL_ID)}`,
-      { method: "POST" }
-    );
-    const data = await res.json();
+    try {
+        const res = await fetch(
+            `https://api.silentpwa.com/payment/start?install_id=${INSTALL_ID}`,
+            { method: 'POST' }
+        );
+        const data = await res.json();
 
-    if (!data.btc_address || !data.amount_btc) {
-      alert("Errore nella creazione della richiesta di pagamento.");
-      return;
+        const btcAddr = data.btc_address;
+        const amount = data.amount_btc;
+
+        const ov = document.getElementById('licenseOverlay');
+        ov.style.display = 'flex';
+
+        document.getElementById('licenseQr').src =
+            `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:${btcAddr}?amount=${amount}`;
+        document.getElementById('licenseAddr').textContent = btcAddr;
+        document.getElementById('licenseAmount').textContent = amount + ' BTC';
+
+        pollPaymentStatus();
+    } catch (e) {
+        alert('Errore rete durante pagamento Bitcoin.');
     }
-
-    const btcAddr = data.btc_address;
-    const amount = data.amount_btc;
-
-    const ov = document.getElementById('licenseOverlay');
-    ov.style.display = 'flex';
-
-    document.getElementById("licenseQr").src =
-      `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:${btcAddr}?amount=${amount}`;
-
-    document.getElementById("licenseAddr").textContent = btcAddr;
-    document.getElementById("licenseAmount").textContent = amount + " BTC";
-
-    pollPaymentStatus();
-
-  } catch (err) {
-    console.error("Errore pagamento BTC:", err);
-    alert("Errore durante il pagamento Bitcoin.");
-  }
 }
 
 function pollPaymentStatus() {
-  const timer = setInterval(async () => {
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/payment/status?install_id=${encodeURIComponent(INSTALL_ID)}`
-      );
-      const data = await res.json();
+    const timer = setInterval(async () => {
+        try {
+            const r = await fetch(
+                `https://api.silentpwa.com/payment/status?install_id=${INSTALL_ID}`
+            );
+            const data = await r.json();
 
-      if (data.status === "pro") {
-        clearInterval(timer);
-        alert("Pagamento ricevuto! Licenza PRO attivata.");
-        const ov = document.getElementById('licenseOverlay');
-        if (ov) ov.style.display = 'none';
-        fetchLicenseStatus();
-      }
+            if (data.status === 'pro') {
+                clearInterval(timer);
+                alert('Licenza PRO attivata.');
+                document.getElementById('licenseOverlay').style.display = 'none';
+                location.reload();
+            }
+        } catch {}
+    }, 5000);
+}
 
-    } catch (err) {
-      console.warn("Errore polling licenza:", err);
+document.getElementById('licenseBuyBtn').onclick = startBitcoinPayment;
+document.getElementById('licenseDemoBtn').onclick = () => {
+    document.getElementById('licenseOverlay').style.display = 'none';
+};
+
+// ------------------------------------------------------
+// NOTIFICATION INCOMING
+// ------------------------------------------------------
+
+async function notifyIncoming(kind) {
+    if (!document.hidden) return;
+
+    unreadCount++;
+    setBadge(unreadCount);
+    playBeep();
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+        const reg = await navigator.serviceWorker.getRegistration();
+        reg?.showNotification('Silent', {
+            body:
+                kind === 'text'
+                    ? 'Nuovo messaggio'
+                    : kind === 'image'
+                    ? 'Nuova foto'
+                    : 'Nuovo audio',
+            icon: './icons/notify.png',
+            badge: './icons/notify.png',
+        });
     }
-  }, 5000);
-}
-
-document.getElementById('licenseBuyBtn').addEventListener('click', startBitcoinPayment);
-document.getElementById('licenseDemoBtn').addEventListener('click', () => {
-  document.getElementById('licenseOverlay').style.display = 'none';
-});
-
-// ------------------------------------------------------
-// PHOTO MENU
-// ------------------------------------------------------
-
-function showPhotoMenu() {
-  els.photoMenu.style.display = 'flex';
-}
-
-function hidePhotoMenu() {
-  els.photoMenu.style.display = 'none';
-}
-
-els.photoBtn.addEventListener('click', () => {
-  if (!isFeatureAllowed('image')) {
-    alert("In DEMO puoi inviare solo testo.");
-    updateLicenseOverlay();
-    return;
-  }
-  showPhotoMenu();
-});
-
-els.closePhotoMenu.addEventListener('click', hidePhotoMenu);
-
-els.takePhotoBtn.addEventListener('click', () => {
-  hidePhotoMenu();
-  els.cameraInput.click();
-});
-
-els.choosePhotoBtn.addEventListener('click', () => {
-  hidePhotoMenu();
-  els.galleryInput.click();
-});
-
-// ------------------------------------------------------
-// IMAGE SENDING
-// ------------------------------------------------------
-
-function blobToBase64(blob) {
-  return new Promise(resolve => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(fr.result.split(',')[1]);
-    fr.readAsDataURL(blob);
-  });
-}
-
-async function compressImage(img, {maxW = 1280, maxH = 1280, quality = 0.85} = {}) {
-  const w = img.naturalWidth;
-  const h = img.naturalHeight;
-  const r = Math.min(maxW / w, maxH / h, 1);
-
-  const nw = Math.round(w * r);
-  const nh = Math.round(h * r);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = nw;
-  canvas.height = nh;
-
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0, nw, nh);
-
-  return new Promise(resolve => {
-    canvas.toBlob(b => resolve({ blob: b, width: nw, height: nh }), 'image/jpeg', quality);
-  });
-}
-
-// (continua nella PARTE 2…)
-//----------------------------------------------------
-// Silent PWA - app.js (PARTE 2/2)
-// Riparato, senza placeholder, identico alla logica originale
-//----------------------------------------------------
-
-// ------------------------------------------------------
-// HANDLE IMAGE INPUTS
-// ------------------------------------------------------
-
-els.cameraInput.addEventListener('change', async e => {
-  if (!e.target.files?.[0]) return;
-
-  const file = e.target.files[0];
-  const img = new Image();
-
-  img.onload = async () => {
-    const { blob } = await compressImage(img);
-    const base64 = await blobToBase64(blob);
-
-    const enc = await e2e.encrypt(base64);
-    ws.send(JSON.stringify({ type: "image", ...enc, mime: "image/jpeg" }));
-
-    addImage(base64, 'me', "image/jpeg");
-  };
-
-  img.src = URL.createObjectURL(file);
-});
-
-els.galleryInput.addEventListener('change', async e => {
-  if (!e.target.files?.[0]) return;
-
-  const file = e.target.files[0];
-  const img = new Image();
-
-  img.onload = async () => {
-    const { blob } = await compressImage(img);
-    const base64 = await blobToBase64(blob);
-
-    const enc = await e2e.encrypt(base64);
-    ws.send(JSON.stringify({ type: "image", ...enc, mime: "image/jpeg" }));
-
-    addImage(base64, 'me', "image/jpeg");
-  };
-
-  img.src = URL.createObjectURL(file);
-});
-
-// ------------------------------------------------------
-// ADD IMAGE TO CHAT
-// ------------------------------------------------------
-
-function addImage(base64, who = 'me', mime = 'image/jpeg') {
-  const li = document.createElement('li');
-  li.className = who;
-  const img = document.createElement('img');
-  img.src = `data:${mime};base64,${base64}`;
-  li.appendChild(img);
-  els.log.appendChild(li);
-  els.log.scrollTop = els.log.scrollHeight;
-
-  if (who === 'peer') onIncoming('image');
-
-  setTimeout(() => li.remove(), 5 * 60 * 1000);
 }
 
 // ------------------------------------------------------
-// AUDIO RECORDING
+// CHAT UI
 // ------------------------------------------------------
 
-els.audioBtn.addEventListener('click', async () => {
-  if (!isFeatureAllowed('audio')) {
-    alert("In DEMO puoi inviare solo testo.");
-    updateLicenseOverlay();
-    return;
-  }
+function escapeHtml(s) {
+    return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+function addMsg(text, who = 'peer') {
+    const li = document.createElement('li');
+    li.className = who;
+    li.textContent = text;
+    els.log.appendChild(li);
+    els.log.scrollTop = els.log.scrollHeight;
 
+    if (who === 'peer') notifyIncoming('text');
+
+    setTimeout(() => li.remove(), 5 * 60 * 1000);
+}
+
+// ------------------------------------------------------
+// KEY MANAGEMENT + RESTORE CACHE (30 giorni)
+// ------------------------------------------------------
+
+const KEYCACHE_KEY = 'e2e_keycache_v1';
+const KEYCACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+function loadKeyCache() {
+    try {
+        const raw = localStorage.getItem(KEYCACHE_KEY);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (Date.now() > obj.expiresAt) {
+            localStorage.removeItem(KEYCACHE_KEY);
+            return null;
+        }
+        return obj;
+    } catch {
+        return null;
+    }
+}
+
+async function saveKeyCache({ priv, pub, peer }) {
+    const payload = {
+        myPrivJwk: priv,
+        myPubRawB64: pub,
+        peerPubRawB64: peer,
+        expiresAt: Date.now() + KEYCACHE_TTL_MS,
+    };
+    localStorage.setItem(KEYCACHE_KEY, JSON.stringify(payload));
+}
+
+async function tryRestoreFromCache() {
+    const c = loadKeyCache();
+    if (!c) return false;
+
+    try {
+        await e2e.restoreFromCache(c);
+        sessionStarted = true;
+        return true;
+    } catch {
+        localStorage.removeItem(KEYCACHE_KEY);
+        return false;
+    }
+}
+
+// ------------------------------------------------------
+// FOTO (compress + menu)
+// ------------------------------------------------------
+
+async function blobToBase64(blob) {
+    return new Promise((resolve) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result.split(',')[1]);
+        fr.readAsDataURL(blob);
+    });
+}
+
+async function imageToJpeg(img, max = 1280, quality = 0.85) {
+    const r = Math.min(max / img.naturalWidth, max / img.naturalHeight, 1);
+    const w = Math.round(img.naturalWidth * r);
+    const h = Math.round(img.naturalHeight * r);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+    return new Promise((resolve) =>
+        canvas.toBlob(
+            (b) => resolve({ blob: b, w, h }),
+            'image/jpeg',
+            quality
+        )
+    );
+}
+
+async function handleFile(file) {
+    if (window.__LICENSE_STATUS__ !== 'pro') {
+        alert('Solo PRO può inviare foto.');
+        return;
+    }
+
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    await img.decode();
+
+    const { blob } = await imageToJpeg(img);
+    const b64 = await blobToBase64(blob);
+
+    const enc = await e2e.encrypt(b64);
+    ws.send(
+        JSON.stringify({
+            type: 'image',
+            iv: enc.iv,
+            ct: enc.ct,
+            mime: 'image/jpeg',
+        })
+    );
+
+    const url = URL.createObjectURL(blob);
+    const li = document.createElement('li');
+    li.className = 'me';
+    const im = document.createElement('img');
+    im.src = url;
+    im.style.maxWidth = '70%';
+    li.appendChild(im);
+    els.log.appendChild(li);
+    els.log.scrollTop = els.log.scrollHeight;
+
+    setTimeout(() => {
+        URL.revokeObjectURL(url);
+        li.remove();
+    }, 5 * 60 * 1000);
+}
+
+// CONTINUA IN PARTE 2…
+// ------------------------------------------------------
+// AUDIO – registrazione 60s
+// ------------------------------------------------------
+
+let mediaStream = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let audioMime = 'audio/webm;codecs=opus';
+let audioTimer = null;
+
+function pickBestAudioMime() {
+    const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+    for (const t of types) {
+        if (MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return 'audio/webm';
+}
+
+async function startRecording() {
+    if (window.__LICENSE_STATUS__ !== 'pro') {
+        alert('Solo PRO può inviare audio.');
+        return;
+    }
+    if (!isConnected || !e2e.ready) {
+        alert('Non connesso.');
+        return;
+    }
+
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioMime = pickBestAudioMime();
     audioChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    showRecBadge(60);
 
-    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder = new MediaRecorder(mediaStream, { mimeType: audioMime });
+    mediaRecorder.ondataavailable = (ev) => audioChunks.push(ev.data);
 
     mediaRecorder.onstop = async () => {
-      clearRecBadge();
-      clearTimeout(audioTimer);
+        clearTimeout(audioTimer);
+        mediaStream.getTracks().forEach((t) => t.stop());
 
-      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-      const base64 = await blobToBase64(blob);
+        const blob = new Blob(audioChunks, { type: audioMime });
+        const b64 = await blobToBase64(blob);
 
-      addAudio(URL.createObjectURL(blob), 'me', mediaRecorder.mimeType);
+        if (b64.length > 300000) {
+            addMsg('Audio troppo lungo.', 'me');
+            return;
+        }
 
-      const enc = await e2e.encrypt(base64);
-      ws.send(JSON.stringify({
-        type: "audio",
-        ...enc,
-        mime: mediaRecorder.mimeType
-      }));
+        const enc = await e2e.encrypt(b64);
+
+        ws.send(
+            JSON.stringify({
+                type: 'audio',
+                iv: enc.iv,
+                ct: enc.ct,
+                mime: audioMime,
+            })
+        );
+
+        const url = URL.createObjectURL(blob);
+        const li = document.createElement('li');
+        li.className = 'me';
+        const player = document.createElement('audio');
+        player.controls = true;
+        player.src = url;
+        li.appendChild(player);
+        els.log.appendChild(li);
+        els.log.scrollTop = els.log.scrollHeight;
+
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+            li.remove();
+        }, 5 * 60 * 1000);
     };
 
-    mediaRecorder.start();
+    mediaRecorder.start(1000);
 
     audioTimer = setTimeout(() => {
-      if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
-      }
-    }, 60 * 1000);
-
-  } catch (err) {
-    alert("Microfono non accessibile.");
-    console.error(err);
-  }
-});
-
-// ------------------------------------------------------
-// AUDIO UI BADGE
-// ------------------------------------------------------
-
-let recBadge = null;
-let recTimerInt = null;
-
-function ensureRecBadge() {
-  if (!recBadge) {
-    recBadge = document.createElement('div');
-    recBadge.style.position = 'fixed';
-    recBadge.style.top = '10px';
-    recBadge.style.right = '10px';
-    recBadge.style.background = '#b81c1c';
-    recBadge.style.color = '#fff';
-    recBadge.style.padding = '10px 14px';
-    recBadge.style.borderRadius = '8px';
-    recBadge.style.zIndex = '9999';
-    recBadge.style.fontWeight = 'bold';
-    document.body.appendChild(recBadge);
-  }
-  return recBadge;
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+            addMsg('⏱️ Fine registrazione (60s).', 'me');
+        }
+    }, 60000);
 }
 
-function showRecBadge(maxSec = 60) {
-  let secLeft = maxSec;
-  const badge = ensureRecBadge();
-  badge.textContent = `Registrazione… ${secLeft}s`;
-  badge.style.display = 'block';
-
-  recTimerInt = setInterval(() => {
-    secLeft -= 1;
-    badge.textContent = `Registrazione… ${secLeft}s`;
-    if (secLeft <= 0) {
-      clearInterval(recTimerInt);
-    }
-  }, 1000);
-}
-
-function clearRecBadge() {
-  if (recTimerInt) clearInterval(recTimerInt);
-  if (recBadge) recBadge.style.display = 'none';
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
 }
 
 // ------------------------------------------------------
-// ADD AUDIO TO CHAT
+// PWA INSTALL
 // ------------------------------------------------------
 
-function addAudio(url, who = 'me', mime = 'audio/webm') {
-  const li = document.createElement('li');
-  li.className = who;
-  const audio = document.createElement('audio');
-  audio.controls = true;
-  audio.src = url;
-  li.appendChild(audio);
-  els.log.appendChild(li);
-  els.log.scrollTop = els.log.scrollHeight;
+let deferredPrompt = null;
 
-  if (who === 'peer') onIncoming('audio');
-
-  setTimeout(() => li.remove(), 5 * 60 * 1000);
-}
-
-// ------------------------------------------------------
-// INCOMING NOTIFICATIONS
-// ------------------------------------------------------
-
-function onIncoming(type) {
-  if (windowHasFocus) return;
-
-  unreadCount++;
-  document.title = `(${unreadCount}) Silent`;
-
-  if (navigator.setAppBadge) navigator.setAppBadge(unreadCount);
-
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    osc.frequency.value = 440;
-    osc.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.1);
-  } catch (err) {
-    console.warn("Beep fallback:", err);
-  }
-
-  if (Notification.permission === "granted") {
-    new Notification("Nuovo messaggio");
-  }
-}
-
-// ------------------------------------------------------
-// E2E CHAT MESSAGING
-// ------------------------------------------------------
-
-els.sendBtn.addEventListener('click', sendText);
-els.textInput.addEventListener('keydown', e => {
-  if (e.key === "Enter" && !e.shiftKey) {
+window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
-    sendText();
-  }
+    deferredPrompt = e;
 });
 
-async function sendText() {
-  const t = els.textInput.value.trim();
-  if (!t) return;
-
-  if (!isFeatureAllowed('text')) {
-    alert("In DEMO puoi inviare solo testo.");
-    updateLicenseOverlay();
-    return;
-  }
-
-  addMsg(t, 'me');
-  els.textInput.value = "";
-
-  if (!sessionStarted) {
-    alert("Sessione non avviata.");
-    return;
-  }
-
-  const enc = await e2e.encrypt(t);
-  ws.send(JSON.stringify({ type: "msg", ...enc }));
-}
-
-// ------------------------------------------------------
-// ADD TEXT TO CHAT
-// ------------------------------------------------------
-
-function addMsg(text, who = 'me') {
-  const li = document.createElement('li');
-  li.className = who;
-  li.textContent = text;
-  els.log.appendChild(li);
-  els.log.scrollTop = els.log.scrollHeight;
-
-  if (who === 'peer') onIncoming('text');
-
-  setTimeout(() => li.remove(), 5 * 60 * 1000);
-}
-
-// ------------------------------------------------------
-// E2E SESSION START
-// ------------------------------------------------------
-
-document.getElementById('copyMyKey').addEventListener('click', () => {
-  navigator.clipboard.writeText(els.myPub.value);
-  alert("Chiave copiata.");
-});
-
-els.startBtn.addEventListener('click', async () => {
-  try {
-    const peerRaw = els.peerPub.value.trim();
-    if (!peerRaw) {
-      alert("Incolla la chiave del partner.");
-      return;
-    }
-
-    if (!e2e.ready) {
-      await e2e.ensureKeys();
-      els.myPub.value = e2e.rawPub;
-    }
-
-    pendingPeerKey = peerRaw;
-
-    if (ws?.readyState === WebSocket.OPEN) {
-      startSessionNow();
+els.installBtn.onclick = async () => {
+    if (deferredPrompt) {
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
     } else {
-      alert("Connessione WebSocket non pronta.");
+        alert('Per installare: usa "Aggiungi alla schermata Home".');
     }
+};
 
-  } catch (err) {
-    console.error(err);
-    alert("Errore avvio sessione.");
-  }
-});
+// ------------------------------------------------------
+// WEBSOCKET
+// ------------------------------------------------------
 
-async function startSessionNow() {
-  try {
-    await e2e.initPeer(pendingPeerKey);
-
-    const fp = fingerprintFromRawBase64(e2e.rawPub);
-    console.log("Fingerprint locale:", fp);
-
-    ws.send(JSON.stringify({ type: "key", raw: e2e.rawPub }));
-
-    sessionStarted = true;
-    alert("Sessione avviata!");
-
-  } catch (err) {
-    console.error("Errore sessione:", err);
-    alert("Errore durante l’avvio della sessione.");
-  }
+function setConnState(ok) {
+    isConnected = ok;
+    els.connStatus.textContent = ok ? 'Connesso' : 'Disconnesso';
 }
 
-// ------------------------------------------------------
-// WEBSOCKET SETUP
-// ------------------------------------------------------
+async function connectWS() {
+    if (isConnecting || isConnected) return;
+    isConnecting = true;
 
-async function connect() {
-  if (isConnecting) return;
-  isConnecting = true;
-
-  try {
     let wsUrl = FORCED_WS;
     const sep = wsUrl.includes('?') ? '&' : '?';
-    wsUrl = `${wsUrl}${sep}install_id=${encodeURIComponent(INSTALL_ID)}`;
+    wsUrl += `${sep}install_id=${INSTALL_ID}`;
 
     ws = new WebSocket(wsUrl);
 
-    ws.addEventListener('open', () => {
-      isConnecting = false;
-      setConnState(true);
-      console.log("WS open:", wsUrl);
-    });
+    ws.onopen = async () => {
+        isConnecting = false;
+        setConnState(true);
 
-    ws.addEventListener('close', () => {
-      setConnState(false);
-      sessionStarted = false;
-      pendingPeerKey = null;
+        await e2e.init();
+        myPubExpected = e2e.myPubRaw;
 
-      if (shouldAutoReconnect) {
-        setTimeout(connect, 2000);
-      }
-    });
+        els.myPub.value = myPubExpected;
 
-    ws.addEventListener('message', async ev => {
-      let msg;
-      try { msg = JSON.parse(ev.data); }
-      catch { return; }
+        if (!(await tryRestoreFromCache())) {
+            ws.send(JSON.stringify({ type: 'key', raw: myPubExpected }));
+        }
+    };
 
-      if (msg.type === 'ping') {
-        ws.send(JSON.stringify({ type: "pong" }));
-        return;
-      }
+    ws.onclose = () => {
+        isConnected = false;
+        isConnecting = false;
+        setConnState(false);
+        setTimeout(connectWS, 2000);
+    };
 
-      if (msg.type === 'presence') {
-        return;
-      }
+    ws.onmessage = async (ev) => {
+        let msg;
+        try {
+            msg = JSON.parse(ev.data);
+        } catch {
+            return;
+        }
 
-      if (msg.type === 'key') {
-        pendingPeerKey = msg.raw;
-        await startSessionNow();
-        return;
-      }
+        if (msg.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }));
+            return;
+        }
 
-      if (!e2e.ready) return;
+        if (msg.type === 'presence') return;
 
-      if (msg.type === 'msg') {
-        const plain = await e2e.decrypt(msg.iv, msg.ct);
-        addMsg(plain, 'peer');
-        return;
-      }
+        if (msg.type === 'license_update' && msg.status === 'pro') {
+            document.getElementById('demo-badge').hidden = true;
+            document.getElementById('licenseOverlay').hidden = true;
+            window.__LICENSE_STATUS__ = 'pro';
+            return;
+        }
 
-      if (msg.type === 'image') {
-        const plain = await e2e.decrypt(msg.iv, msg.ct);
-        addImage(plain, 'peer', msg.mime);
-        return;
-      }
+        if (msg.type === 'key') {
+            const peerRaw = msg.raw?.trim();
+            if (!peerRaw) return;
 
-      if (msg.type === 'audio') {
-        const plain = await e2e.decrypt(msg.iv, msg.ct);
-        const blob = await fetch(`data:${msg.mime};base64,${plain}`).then(r => r.blob());
-        addAudio(URL.createObjectURL(blob), 'peer', msg.mime);
-        return;
-      }
-    });
+            if (!sessionStarted) {
+                pendingPeerKey = peerRaw;
+                return;
+            }
 
-  } catch (err) {
-    console.error("WS error:", err);
-  }
+            await e2e.setPeerPublicKey(peerRaw);
+            e2e.peerPubRawB64 = peerRaw;
+            return;
+        }
+
+        if (!e2e.ready) return;
+
+        if (msg.type === 'msg') {
+            const t = await e2e.decrypt(msg.iv, msg.ct);
+            addMsg(t, 'peer');
+            return;
+        }
+
+        if (msg.type === 'image') {
+            const b64 = await e2e.decrypt(msg.iv, msg.ct);
+            const bin = atob(b64);
+            const buf = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+
+            const blob = new Blob([buf], { type: msg.mime });
+            const url = URL.createObjectURL(blob);
+
+            const li = document.createElement('li');
+            li.className = 'peer';
+            const img = document.createElement('img');
+            img.src = url;
+            img.style.maxWidth = '70%';
+            li.appendChild(img);
+            els.log.appendChild(li);
+            els.log.scrollTop = els.log.scrollHeight;
+
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+                li.remove();
+            }, 5 * 60 * 1000);
+
+            notifyIncoming('image');
+            return;
+        }
+
+        if (msg.type === 'audio') {
+            const b64 = await e2e.decrypt(msg.iv, msg.ct);
+            const bin = atob(b64);
+            const buf = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+
+            const blob = new Blob([buf], { type: msg.mime });
+            const url = URL.createObjectURL(blob);
+
+            const li = document.createElement('li');
+            li.className = 'peer';
+            const audio = document.createElement('audio');
+            audio.controls = true;
+            audio.src = url;
+            li.appendChild(audio);
+            els.log.appendChild(li);
+            els.log.scrollTop = els.log.scrollHeight;
+
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+                li.remove();
+            }, 5 * 60 * 1000);
+
+            notifyIncoming('audio');
+            return;
+        }
+    };
 }
-
-connect();
 
 // ------------------------------------------------------
-// iOS INSTALL BANNER
+// SESSION START
 // ------------------------------------------------------
 
-function isIOS() {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
-}
+els.startBtn.onclick = async () => {
+    await e2e.init();
+    sessionStarted = true;
 
-function isInStandalone() {
-  return window.navigator.standalone === true;
-}
+    let peer = els.peerPub.value.trim();
+    if (!peer && pendingPeerKey) peer = pendingPeerKey;
+    if (!peer) {
+        alert('Inserisci la chiave del peer.');
+        return;
+    }
 
-function maybeShowIOSInstallBanner() {
-  if (!isIOS()) return;
-  if (isInStandalone()) return;
+    await e2e.setPeerPublicKey(peer);
+    e2e.peerPubRawB64 = peer;
 
-  if (localStorage.getItem("iosBannerNever") === "1") return;
+    ws.send(JSON.stringify({ type: 'key', raw: e2e.myPubRaw }));
 
-  els.iosBanner.style.display = 'block';
-}
+    const priv = await crypto.subtle.exportKey('jwk', e2e.ecKeyPair.privateKey);
+    await saveKeyCache({
+        priv,
+        pub: e2e.myPubRaw,
+        peer,
+    });
+};
 
-els.iosClose.addEventListener('click', () => {
-  els.iosBanner.style.display = 'none';
+// ------------------------------------------------------
+// SEND TEXT
+// ------------------------------------------------------
+
+els.sendBtn.onclick = async () => {
+    if (window.__LICENSE_STATUS__ !== 'pro') {
+        alert('Solo PRO può inviare messaggi.');
+        return;
+    }
+
+    if (!isConnected || !e2e.ready) {
+        alert('Non connesso.');
+        return;
+    }
+
+    let t = els.input.value.trim();
+    if (!t) return;
+
+    const enc = await e2e.encrypt(t);
+
+    ws.send(
+        JSON.stringify({
+            type: 'msg',
+            iv: enc.iv,
+            ct: enc.ct,
+        })
+    );
+
+    addMsg(t, 'me');
+    els.input.value = '';
+};
+
+els.input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        els.sendBtn.click();
+    }
 });
 
-els.iosNever.addEventListener('click', () => {
-  localStorage.setItem("iosBannerNever", "1");
-  els.iosBanner.style.display = 'none';
-});
-
-maybeShowIOSInstallBanner();
-
 // ------------------------------------------------------
-// SERVICE WORKER
+// UTILITY BUTTONS
 // ------------------------------------------------------
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js')
-    .then(() => console.log("SW registered"))
-    .catch(err => console.warn("SW failed:", err));
-}
+document.getElementById('clearBtn').onclick = () => {
+    els.log.innerHTML = '';
+};
+
+els.copyMyBtn.onclick = () => {
+    navigator.clipboard.writeText(els.myPub.value);
+};
 
 // ------------------------------------------------------
-// INITIAL STEPS
+// PHOTO MENU (NUOVO)
 // ------------------------------------------------------
 
-(async () => {
-  await e2e.ensureKeys();
-  els.myPub.value = e2e.rawPub;
+const photoBtn = document.getElementById('photoBtn');
+const cameraInput = document.getElementById('cameraInput');
+const galleryInput = document.getElementById('galleryInput');
 
-  await fetchLicenseStatus();
+photoBtn.onclick = () => {
+    document.getElementById('photoMenu').style.display = 'block';
+};
+
+document.getElementById('pmCamera').onclick = () => {
+    document.getElementById('photoMenu').style.display = 'none';
+    cameraInput.click();
+};
+
+document.getElementById('pmGallery').onclick = () => {
+    document.getElementById('photoMenu').style.display = 'none';
+    galleryInput.click();
+};
+
+document.getElementById('pmClose').onclick = () => {
+    document.getElementById('photoMenu').style.display = 'none';
+};
+
+cameraInput.onchange = () => {
+    if (cameraInput.files[0]) handleFile(cameraInput.files[0]);
+    cameraInput.value = '';
+};
+
+galleryInput.onchange = () => {
+    if (galleryInput.files[0]) handleFile(galleryInput.files[0]);
+    galleryInput.value = '';
+};
+
+// ------------------------------------------------------
+// AUDIO BUTTONS
+// ------------------------------------------------------
+
+document.getElementById('recBtn').onclick = startRecording;
+document.getElementById('stopBtn').onclick = stopRecording;
+
+// ------------------------------------------------------
+// AUTOBOOT
+// ------------------------------------------------------
+
+(async function () {
+    await initLicense();
+    await e2e.init();
+    connectWS();
 })();
