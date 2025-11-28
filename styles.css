@@ -1,318 +1,298 @@
-/* ---------------------------------------------------
-   GLOBAL STYLES
---------------------------------------------------- */
-
-:root {
-    --bg-start: #ffffff;
-    --bg-end: #d8c4af;
-    --glass-bg: rgba(255, 255, 255, 0.45);
-    --glass-border: rgba(255, 255, 255, 0.25);
-    --text-color: #111;
-    --primary: #333;
-    --secondary: #555;
-    --accent: #b1814d;
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  /* gradiente dall'alto bianco al basso marrone chiaro */
+  background: linear-gradient(to bottom, #ffffff 0%, #e8d9c6 100%);
+  color:#1b1b1b;
+  font:16px/1.4 Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif
+}
+header,footer{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:12px 16px;background:rgba(255,255,255,.7);backdrop-filter:saturate(140%) blur(4px);
+  border-bottom:1px solid rgba(0,0,0,.06)
+}
+footer{border-top:1px solid rgba(0,0,0,.06);border-bottom:none;color:#333}
+header .brand{display:flex;gap:10px;align-items:center}
+header .actions{display:flex;gap:8px;align-items:center}
+h1{margin:0;font-size:18px}
+main{max-width:900px;margin:0 auto;padding:16px;display:grid;gap:16px}
+.panel{background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:14px;box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.panel h2{margin:0 0 10px 0;font-size:16px;color:#5a3e2b}
+label{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+input,textarea,select,button{
+  border-radius:10px;border:1px solid rgba(0,0,0,.15);background:#fff;color:#1b1b1b;padding:10px
+}
+textarea{min-height:92px}
+input:focus,textarea:focus,select:focus,button:focus{outline:2px solid #b98b5e3a}
+button{cursor:pointer}
+button.ghost{background:transparent}
+button.danger{border-color:#b86b6b;background:#fff3f3}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width: 720px){.grid2{grid-template-columns:1fr}}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.messages{
+  list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;
+  max-height:48vh;overflow:auto;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:12px;padding:10px
+}
+.msg{padding:10px 12px;border:1px solid rgba(0,0,0,.08);background:#ffffff;border-radius:12px;max-width:70%}
+.me{align-self:flex-end;background:#fff7ef;border-color:#e8c9a3}
+.msg.other {background-color: #d1f7c4; /* verde chiaro */}
+.meta{font-size:12px;color:#666;margin-top:6px}
+.composer{display:flex;gap:8px;margin-top:10px}
+a{color:#6d4e34}
+dialog{border-radius:12px;border:1px solid rgba(0,0,0,.1);background:#fff;color:#1b1b1b}
+.status-box {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: bold;
+  text-align: center;
+  color: white;
+}
+.status-box.connected {
+  background-color: #4caf50; /* verde */
+}
+.status-box.disconnected {
+  background-color: #f44336; /* rosso */
+}
+/* Nasconde solo il box di stato sotto al titolo */
+#connStatus { display: none !important; } 
+/* Layout base lista messaggi */
+.messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-html, body {
-    margin: 0;
-    padding: 0;
-    background: linear-gradient(180deg, var(--bg-start), var(--bg-end));
-    font-family: system-ui, sans-serif;
-    color: var(--text-color);
-    min-height: 100vh;
+/* Bubble comune */
+.messages li {
+  max-width: 75%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  box-shadow: 0 1px 2px rgba(0,0,0,.08);
+  font-size: 1.05rem;   /* <--- leggermente più grande */
 }
 
-body.demo-mode .composer button.secondary-btn,
-body.demo-mode #photoBtn,
-body.demo-mode #audioBtn {
-    opacity: 0.5;
-    pointer-events: none;
+/* I tuoi messaggi: verde, a destra */
+.messages li.me {
+  align-self: flex-end;
+  background: #16a34a;    /* verde */
+  color: #fff;
 }
 
-/* ---------------------------------------------------
-   GLASS EFFECT
---------------------------------------------------- */
-
-.glass {
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    backdrop-filter: blur(12px);
-    border-radius: 14px;
-    padding: 15px;
+/* Messaggi in arrivo: grigio chiaro, a sinistra */
+.messages li.peer {
+  align-self: flex-start;
+  background: #f3f4f6;    /* grigio chiaro */
+  color: #111;
 }
 
-/* ---------------------------------------------------
-   HEADER
---------------------------------------------------- */
-
-.app-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px;
-    margin: 0;
+/* Immagini dentro le bubble: non sforare */
+.messages li img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
 }
+/* --- Base responsive & no overflow orizzontale --- */
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; overflow-x: hidden; }
+img, video { max-width: 100%; height: auto; display: block; }
 
-.brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
+/* Pannelli e contenitori a tutta larghezza su mobile */
+main, header, footer, .panel { width: 100%; }
 
-.brand-icon {
-    width: 40px;
-    height: 40px;
-}
+/* Messaggi: impedisci che righe molto lunghe allarghino la pagina */
+.messages { width: 100%; }
+.messages li { word-break: break-word; overflow-wrap: anywhere; }
 
-.brand-title {
-    font-size: 1.4rem;
-    font-weight: bold;
-}
-
-#langSel {
-    padding: 5px;
-    border-radius: 6px;
-    border: 1px solid #aaa;
-    background: #fff;
-}
-
-.conn-state {
-    margin-left: 10px;
-    font-weight: bold;
-    color: #a00;
-}
-
-/* ---------------------------------------------------
-   SESSION BOX
---------------------------------------------------- */
-
-.session-box {
-    margin: 20px;
-}
-
-.session-row {
-    margin-bottom: 15px;
-}
-
-.session-row label {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 0.9rem;
-}
-
-.session-row textarea {
-    width: 100%;
-    height: 70px;
-    resize: none;
-    padding: 8px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-}
-
-.session-actions {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 12px;
-}
-
-.hint {
-    font-size: 0.85rem;
-    color: #444;
-}
-
-/* ---------------------------------------------------
-   CHAT
---------------------------------------------------- */
-
-.chat-box {
-    margin: 20px;
-    min-height: 350px;
-    display: flex;
-    flex-direction: column;
-}
-
-#log {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 10px 0;
-    overflow-y: auto;
-    flex: 1;
-    max-height: 60vh;
-}
-
-#log li {
-    padding: 8px;
-    margin-bottom: 10px;
-    border-radius: 6px;
-    background: #fff;
-    word-break: break-word;
-}
-
-#log li.me {
-    background: #e6dccc;
-    text-align: right;
-}
-
-#log img {
-    max-width: 80%;
-    border-radius: 8px;
-}
-
-#log audio {
-    width: 80%;
-}
-
-/* ---------------------------------------------------
-   COMPOSER
---------------------------------------------------- */
-
+/* Composer: input elastico, bottoni compatti */
 .composer {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto auto; /* input | Foto | Invia */
+  gap: 8px;
+  width: 100%;
+}
+#msgInput {
+  width: 100%;
+  min-width: 0;              /* fondamentale per evitare overflow in grid/flex */
+  font-size: 16px;           /* evita zoom su iOS */
+}
+#photoBtn, #sendBtn {
+  white-space: nowrap;
+  padding: 10px 12px;
 }
 
-.composer textarea {
-    width: 100%;
-    resize: none;
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid #aaa;
+/* Textarea chiavi a larghezza piena */
+#myPub, #peerPub { width: 100%; max-width: 100%; }
+
+/* Header: azioni che vanno a capo se serve */
+header .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.composer-buttons {
-    display: flex;
-    gap: 10px;
+/* --- Mobile specific --- */
+@media (max-width: 600px) {
+  .panel { padding: 12px; }
+  header { padding: 12px; }
+  .messages li { max-width: 88%; }         /* bolle un filo più larghe ma dentro lo schermo */
+  #photoBtn, #sendBtn { padding: 9px 10px; }
+  /* Se lo spazio è strettissimo, nascondi solo il testo "Silent" tenendo l'icona */
+  header .brand h1 { display: none; }
 }
 
-/* ---------------------------------------------------
-   BUTTONS
---------------------------------------------------- */
-
-.primary-btn,
-.secondary-btn {
-    padding: 10px 14px;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    font-weight: bold;
+/* Schermi molto piccoli */
+@media (max-width: 360px) {
+  .composer { grid-template-columns: 1fr auto auto; gap: 6px; }
+  .messages li { max-width: 92%; }
 }
 
-.primary-btn {
-    background: var(--accent);
-    color: #fff;
-}
-
-.secondary-btn {
-    background: #ddd;
-    color: #333;
-}
-
-.secondary-btn:hover {
-    background: #ccc;
-}
-
-/* ---------------------------------------------------
-   LICENSE OVERLAY
---------------------------------------------------- */
-
-.license-overlay {
-    position: fixed;
-    inset: 0;
-    backdrop-filter: blur(6px);
-    background-color: rgba(0,0,0,0.4);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000;
-}
-
-.license-modal {
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    padding: 20px;
-    border-radius: 14px;
-    width: 90%;
-    max-width: 400px;
-    text-align: center;
-}
-
-.license-modal h2 {
-    margin-top: 0;
-}
-
-.qr-image {
-    width: 180px;
-    height: 180px;
-    margin: 10px auto;
-    display: block;
-}
-
-.btc-address,
-.btc-amount {
-    font-family: monospace;
-    margin: 5px 0;
-}
-
-.license-buttons {
-    display: flex;
-    gap: 12px;
-    margin-top: 15px;
-}
-
-/* ---------------------------------------------------
-   PHOTO MENU
---------------------------------------------------- */
-
+/* Mini-menu per la scelta Foto: Scatta / Galleria */
 .photo-menu {
-    position: fixed;
-    inset: 0;
-    display: none;
-    justify-content: center;
-    align-items: center;
-    backdrop-filter: blur(6px);
-    background: rgba(0,0,0,0.4);
-    z-index: 1500;
+  position: fixed;               /* fisso rispetto alla finestra */
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0,0,0,.12);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;        /* bottoni uno sotto l'altro */
+  gap: 10px;
+  min-width: 160px;
+}
+.photo-menu.hidden { display: none; }
+
+.photo-menu button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 1rem;
+  background: #f3f4f6;
+  color: #111;
+  cursor: pointer;
+}
+.photo-menu button[data-act="camera"] { background: #16a34a; color: #fff; }
+.photo-menu button:hover { filter: brightness(0.95); }
+
+/* Fingerprint UI */
+/* niente “finestra nera” */
+.fp { background: transparent; border: 0; padding: 0; margin: .5rem 0; }
+
+/* codici leggibili e a capo */
+.fp code { font-weight: 600; word-break: break-all; overflow-wrap: anywhere; }
+
+/* nascondi FORTE */
+.hidden { display: none !important; }
+
+/* se il box è dentro <details>, chiuso = nascosto */
+details:not([open]) #fp-box { display: none !important; }
+
+/* ...il resto dei tuoi stili... */
+
+/* Badge “Codice verificato” sotto lo stato di connessione */
+.verified-badge {
+  margin-top: 6px;
+  font-weight: 700;
+  color: #16a34a; /* verde */
+  line-height: 1.2;
 }
 
-.photo-menu-box {
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: 250px;
+/* ...i tuoi stili esistenti... */
+
+/* Stato chiave sotto ": connesso" */
+.fp-warn { color: #b45309; } /* arancio/avviso */
+.fp-ok   { color: #16a34a; } /* verde/ok */
+.hidden  { display: none; }
+
+/* (facoltativo) spaziatura del nuovo stato */
+#fp-status {
+  margin: 4px 0 8px;
+  font-weight: 600;
 }
 
-/* ---------------------------------------------------
-   IOS INSTALL BANNER
---------------------------------------------------- */
 
-.ios-banner {
-    background: var(--glass-bg);
-    border-bottom: 1px solid var(--glass-border);
-    padding: 12px;
-    backdrop-filter: blur(10px);
-    position: fixed;
-    top: 0;
-    width: 100%;
-    z-index: 3000;
+
+
+.conn-header{display:flex;align-items:center;gap:.5rem;}
+.conn-header button{font-size:.9rem;padding:.3rem .6rem;}
+
+.ios-install-banner{position:fixed;left:0;right:0;bottom:0;z-index:9999;padding:12px;background:rgba(255,255,255,.92);backdrop-filter:saturate(140%) blur(6px);border-top:1px solid rgba(0,0,0,.08)}
+.ios-install-content{max-width:860px;margin:0 auto}
+.ios-install-content p{margin:6px 0 10px}
+.ios-share{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:#fff}
+
+/* aumenta la dimensione dell’icona ingranaggio */
+#settingsBtn{
+  font-size: 24px;   /* prova 24–28px */
+  line-height: 1;    /* evita che “salti” in verticale */
+  padding: 6px 10px; /* ingrandisce l’area di tap */
 }
 
-.ios-banner-content {
-    text-align: center;
+/* ===== Overlay licenza / BTCPay ===== */
+.license-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.7);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+.license-modal{
+  background:#111827;
+  color:#f9fafb;
+  padding:24px 20px;
+  max-width:420px;
+  width:90%;
+  border-radius:16px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.45);
+}
+.license-modal h2{
+  margin-top:0;
+  margin-bottom:8px;
+  font-size:1.2rem;
+}
+.license-modal p{
+  margin:4px 0;
+}
+.license-countdown{
+  font-size:0.9rem;
+  opacity:0.85;
+}
+.license-buttons{
+  display:flex;
+  gap:12px;
+  margin-top:16px;
+}
+.license-buttons .primary{
+  flex:1;
+  padding:10px 14px;
+  border-radius:999px;
+  border:none;
+  background:#22c55e;
+  color:#052e16;
+  font-weight:600;
+  cursor:pointer;
+}
+.license-buttons .secondary{
+  flex:1;
+  padding:10px 14px;
+  border-radius:999px;
+  border:1px solid rgba(148,163,184,0.7);
+  background:transparent;
+  color:#e5e7eb;
+  font-weight:500;
+  cursor:pointer;
+}
+body.demo-mode main{
+  filter:none;
 }
 
-.ios-banner-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    margin-top: 8px;
-}
-
-/* ---------------------------------------------------
-   MISC
---------------------------------------------------- */
-
-#connStatus {
-    display: none !important;
-}
