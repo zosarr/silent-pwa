@@ -1,50 +1,147 @@
-function b64(arr){ return btoa(String.fromCharCode(...new Uint8Array(arr))); }
-function ub64(str){ return Uint8Array.from(atob(str), c=>c.charCodeAt(0)); }
+//----------------------------------------------------
+// Silent PWA - crypto.js
+// Riparato e completo, nessun placeholder
+//----------------------------------------------------
+
+// Convert array buffer <-> base64 ----------------------------------------
+
+function b64(buf) {
+    return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+
+function ub64(b64str) {
+    const bin = atob(b64str);
+    const len = bin.length;
+    const arr = new Uint8Array(len);
+    for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+}
+
+// SHA-256 helpers ---------------------------------------------------------
+
+async function sha256(buf) {
+    return crypto.subtle.digest("SHA-256", buf);
+}
+
+async function sha256Hex(input) {
+    const data = (input instanceof Uint8Array || input instanceof ArrayBuffer)
+        ? input
+        : new TextEncoder().encode(input);
+
+    const hash = await crypto.subtle.digest("SHA-256", data);
+    return [...new Uint8Array(hash)]
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+// Fingerprint -------------------------------------------------------------
+
+function b64ToBytes(b64str) {
+    return ub64(b64str);
+}
+
+export async function fingerprintFromRawBase64(rawB64, bits = 80) {
+    const bytes = b64ToBytes(rawB64);
+    const hash = new Uint8Array(await sha256(bytes));
+
+    const neededBytes = Math.ceil(bits / 8);
+    const slice = hash.slice(0, neededBytes);
+
+    const hex = [...slice]
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase();
+
+    const groupSize = 4;
+    const groups = [];
+    for (let i = 0; i < hex.length; i += groupSize) {
+        groups.push(hex.slice(i, i + groupSize));
+    }
+    return groups.join('-');
+}
+
+// ------------------------------------------------------------------------
+// E2E CLASS (ECDH + AES-GCM)
+// ------------------------------------------------------------------------
+
 export class E2E {
-  constructor(){ this.ecKeyPair=null; this.sharedKey=null; this.peerPubRaw=null; this.ready=false; }
-  async init(){
-    this.ecKeyPair = await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"}, true, ["deriveKey","deriveBits"]);
-    const rawPub = await crypto.subtle.exportKey("raw", this.ecKeyPair.publicKey);
-    return b64(rawPub);
-  }
-  async setPeerPublicKey(base64raw){
-    this.peerPubRaw = ub64(base64raw).buffer;
-    const peerPubKey = await crypto.subtle.importKey("raw", this.peerPubRaw, {name:"ECDH",namedCurve:"P-256"}, true, []);
-    this.sharedKey = await crypto.subtle.deriveKey({name:"ECDH", public: peerPubKey}, this.ecKeyPair.privateKey,
-                      {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
-    this.ready = true; return true;
-  }
-  async encrypt(plainText){
-    if(!this.sharedKey) throw new Error("No shared key");
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const enc = new TextEncoder().encode(plainText);
-    const ct = await crypto.subtle.encrypt({name:"AES-GCM", iv}, this.sharedKey, enc);
-    return {iv:b64(iv), ct:b64(ct)};
-  }
-  async decrypt(ivB64, ctB64){
-    if(!this.sharedKey) throw new Error("No shared key");
-    const iv = ub64(ivB64); const ct = ub64(ctB64);
-    const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv}, this.sharedKey, ct);
-    return new TextDecoder().decode(pt);
-  }
-}
+    constructor() {
+        this.keyPair = null;
+        this.pub = null;
+        this.rawPub = null;
+        this.sharedKey = null;
+        this.ready = false;
+    }
 
-// === Fingerprint helpers ===
-export const FP_BITS = 80; // increase to 96/128 for more entropy
+    async ensureKeys() {
+        if (this.keyPair) return;
+        this.keyPair = await crypto.subtle.generateKey(
+            {
+                name: "ECDH",
+                namedCurve: "P-256",
+            },
+            true,
+            ["deriveKey"]
+        );
 
-export async function sha256Hex(buffer) {
-  const hash = await crypto.subtle.digest('SHA-256', buffer);
-  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-export function b64ToBytes(b64) {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes.buffer;
-}
-export async function fingerprintFromRawBase64(rawB64, bits = FP_BITS) {
-  const hex = await sha256Hex(b64ToBytes(rawB64));
-  const chars = Math.ceil(bits / 4);
-  const short = hex.slice(0, chars).toUpperCase();
-  return short.match(/.{1,4}/g).join('-');
+        this.pub = await crypto.subtle.exportKey("raw", this.keyPair.publicKey);
+        this.rawPub = b64(this.pub);
+    }
+
+    async initPeer(peerRawB64) {
+        await this.ensureKeys();
+
+        const peerRaw = ub64(peerRawB64);
+
+        const peerKey = await crypto.subtle.importKey(
+            "raw",
+            peerRaw,
+            { name: "ECDH", namedCurve: "P-256" },
+            false,
+            []
+        );
+
+        this.sharedKey = await crypto.subtle.deriveKey(
+            { name: "ECDH", public: peerKey },
+            this.keyPair.privateKey,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["encrypt", "decrypt"]
+        );
+
+        this.ready = true;
+    }
+
+    async encrypt(plainText) {
+        if (!this.ready) throw new Error("Chiave condivisa non pronta.");
+
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const data = new TextEncoder().encode(plainText);
+
+        const ctBuf = await crypto.subtle.encrypt(
+            { name: "AES-GCM", iv },
+            this.sharedKey,
+            data
+        );
+
+        return {
+            iv: b64(iv),
+            ct: b64(ctBuf),
+        };
+    }
+
+    async decrypt(ivB64, ctB64) {
+        if (!this.ready) throw new Error("Chiave condivisa non pronta.");
+
+        const iv = ub64(ivB64);
+        const ct = ub64(ctB64);
+
+        const plainBuf = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv },
+            this.sharedKey,
+            ct
+        );
+
+        return new TextDecoder().decode(plainBuf);
+    }
 }
