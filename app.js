@@ -730,14 +730,21 @@ function pollPaymentStatus() {
     maybeShowIOSInstallBanner && maybeShowIOSInstallBanner();
 
     // Passa install_id nella URL del WS
-    let wsUrl = FORCED_WS;
-    try {
-      const installId = await ensureInstallId();
-      const sep = wsUrl.includes('?') ? '&' : '?';
-      wsUrl = `${wsUrl}${sep}install_id=${encodeURIComponent(installId)}`;
-    } catch(e) {
-      isConnecting=false; return;
-    }
+   let wsUrl = FORCED_WS;
+
+// Aggiungi room=test se non c’è già
+if (!wsUrl.includes("room=")) {
+  const sep = wsUrl.includes("?") ? "&" : "?";
+  wsUrl = `${wsUrl}${sep}room=test`;
+}
+
+try {
+  const installId = await ensureInstallId();
+  wsUrl = `${wsUrl}&install_id=${encodeURIComponent(installId)}`;
+} catch (e) {
+  isConnecting = false;
+  return;
+}
 
     try{ ws=new WebSocket(wsUrl);}catch(e){ isConnecting=false; return;}
 
