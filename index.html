@@ -4,18 +4,19 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Silent</title>
+
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#0d0d0f"/>
+
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Silent">
+
   <link rel="apple-touch-icon" href="./icons/1.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
-<!-- 🔥 VECCHIO OVERLAY RIMOSSO COMPLETAMENTE -->
 
 <!-- Badge demo -->
 <div id="demo-badge" hidden style="position:fixed;bottom:12px;right:12px;background:#111;color:#fff;padding:6px 10px;border-radius:8px;opacity:.85;z-index:9999">
@@ -27,11 +28,13 @@
     <img src="icons/1.png" alt="Silent" width="32" height="32">
     <h1>Silent</h1>
   </div>
+
   <div class="actions">
     <select id="langSelect" aria-label="Language">
       <option value="it">Italiano</option>
       <option value="en">English</option>
     </select>
+
     <button id="toggleBeepBtn" class="ghost" aria-pressed="false">Notifica: OFF</button>
     <button id="installBtn" class="ghost">Install</button>
     <button id="clearBtn" class="danger" data-i18n="clear">Svuota Chat</button>
@@ -39,6 +42,7 @@
 </header>
 
 <main>
+
   <section class="panel">
     <h2 class="conn-header">
       <span data-i18n="connection">:</span>
@@ -53,6 +57,7 @@
 
     <details>
       <summary data-i18n="session">Scambio chiavi</summary>
+
       <div class="grid2">
         <label>
           <span data-i18n="myPub">La mia chiave</span>
@@ -79,22 +84,26 @@
           <code id="my-fp"></code>
           <button id="copy-my-fp" type="button">Copia</button>
         </div>
+
         <div class="fp-row">
           <span>Codice utente:</span>
           <code id="peer-fp"></code>
           <button id="confirm-fp" type="button">Conferma codice</button>
         </div>
       </div>
+
     </details>
   </section>
 
   <section class="panel">
     <h2 data-i18n="chat">Chat</h2>
     <ul id="log" class="messages" aria-live="polite"></ul>
+
     <div class="composer">
       <input id="msgInput" placeholder="Scrivi un messaggio…" autocomplete="off"/>
       <button id="sendBtn" data-i18n="send">Invia</button>
     </div>
+
     <small data-i18n="autodestruct">I messaggi si autodistruggono 5 minuti dopo la lettura.</small>
   </section>
 
@@ -109,9 +118,13 @@
     </div>
   </div>
 
-  <!-- 🔥 NUOVO OVERLAY LICENZA + BITCOIN (CORRETTO) -->
-  <div id="licenseOverlay" class="license-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:99999; padding:20px; display:flex; align-items:center; justify-content:center;">
-    <div class="license-modal" style="background:#111; padding:20px; border-radius:10px; width:90%; max-width:360px; text-align:center;">
+  <!-- OVERLAY LICENZA / BTC CORRETTO -->
+  <div id="licenseOverlay" class="license-overlay"
+       style="position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:99999; padding:20px;
+              display:none; align-items:center; justify-content:center;">
+
+    <div class="license-modal" style="background:#111; padding:20px; border-radius:10px;
+                                      width:90%; max-width:360px; text-align:center;">
 
       <h2 id="licenseTitle" style="color:white;">Modalità PRO</h2>
       <p id="licenseMessage" style="color:#ccc;"></p>
@@ -127,9 +140,14 @@
       <p id="licenseAmount" style="color:#0f0;"></p>
 
       <div class="license-buttons" style="margin-top:20px;">
-        <button id="licenseBuyBtn" class="primary" style="padding:10px 20px; width:100%; margin-bottom:10px;">Acquista PRO</button>
-        <button id="licenseDemoBtn" class="secondary" style="padding:10px 20px; width:100%;">Continua in demo</button>
+        <button id="licenseBuyBtn" class="primary" style="padding:10px 20px; width:100%; margin-bottom:10px;">
+          Acquista PRO
+        </button>
+        <button id="licenseDemoBtn" class="secondary" style="padding:10px 20px; width:100%;">
+          Continua in demo
+        </button>
       </div>
+
     </div>
   </div>
 
@@ -142,5 +160,6 @@
 <script type="module" src="i18n.js"></script>
 <script type="module" src="crypto.js"></script>
 <script type="module" src="app.js"></script>
+
 </body>
 </html>
