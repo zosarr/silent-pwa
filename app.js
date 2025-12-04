@@ -53,53 +53,24 @@ console.log("INSTALL ID:", install_id);
   let licensePollTimer = null;
   let lastLicensePayload = null;
 
-   async function fetchLicenseStatus(showErrors) {
-  try {
-    const url = `${API_BASE_URL}/license/status?install_id=${encodeURIComponent(INSTALL_ID)}`;
-    const res = await fetch(url, { credentials: 'include' });
-
-    if (!res.ok) {
-      console.warn("HTTP NON OK:", res.status);
-
-      if (res.status === 403) {
-        // licenza non valida
-        licenseStatus = "expired";
-        updateLicenseOverlay();
+  async function fetchLicenseStatus(showErrors) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/license/status?install_id=${encodeURIComponent(INSTALL_ID)}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const prevStatus = licenseStatus;
+      licenseStatus = data.status;
+      lastLicensePayload = data;
+      updateLicenseOverlay();
+      if (prevStatus !== 'pro' && licenseStatus === 'pro') {
+        console.info('Licenza PRO attivata');
       }
-
-      throw new Error("HTTP " + res.status);
+    } catch (err) {
+      if (showErrors) {
+        console.error('Errore fetch /license/status', err);
+      }
     }
-
-    // Risposta valida
-    const data = await res.json();
-
-    // Salva stato precedente per capire se siamo passati a PRO
-    const prevStatus = licenseStatus;
-
-    // Aggiorna stato licenza
-    licenseStatus = data.status;              // 'trial' / 'pro' / 'expired'
-    lastLicensePayload = data;
-
-    // Aggiorna overlay grafico
-    updateLicenseOverlay();
-
-    // Se passo da trial → PRO aggiorno UI
-    if (prevStatus !== "pro" && licenseStatus === "pro") {
-      console.info("Licenza PRO attivata");
-      const demoBadge = document.getElementById("demo-badge");
-      demoBadge && demoBadge.setAttribute("hidden", "");
-    }
-
-    return data;
-
-  } catch (err) {
-    if (showErrors) {
-      console.error("Errore fetch /license/status", err);
-    }
-    return null;
   }
-}
-
 
   function isFeatureAllowed(feature) {
     if (licenseStatus === 'pro') return true;
@@ -147,41 +118,6 @@ console.log("INSTALL ID:", install_id);
     extraEl.textContent = extra;
   }
 
-async function startBitcoinPayment() {
-  try {
-    const install_id = localStorage.getItem("install_id");
-
-    const res = await fetch(`https://api.silentpwa.com/payment/start?install_id=${install_id}`, {
-      method: "POST"
-    });
-
-    const data = await res.json();
-
-    if (!data.btc_address || !data.amount_btc) {
-      alert("Errore: risposta non valida dal server.");
-      return;
-    }
-
-    const btcAddr = data.btc_address;
-    const amount = data.amount_btc;
-
-    // Mostra overlay pagamento
-    document.getElementById("licenseOverlay").style.display = "flex";
-
-    // QR dinamico
-    document.getElementById("licenseQr").src =
-      `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:${btcAddr}?amount=${amount}`;
-
-    // Mostra indirizzo e importo
-    document.getElementById("licenseAddr").textContent = btcAddr;
-    document.getElementById("licenseAmount").textContent = amount + " BTC";
-
-    pollPaymentStatus();
-  } catch (err) {
-    console.error("Errore pagamento BTC", err);
-    alert("Errore rete durante pagamento Bitcoin.");
-  }
-}
 
 function pollPaymentStatus() {
   const timer = setInterval(async () => {
