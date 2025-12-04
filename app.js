@@ -1098,11 +1098,25 @@ try {
 
       recBtn.addEventListener('click',async ()=>{
       if (!isFeatureAllowed('audio')) {
-        alert('In modalità DEMO puoi inviare solo messaggi di testo. Passa a PRO per inviare messaggi audio.');
-        const overlay = document.getElementById('licenseOverlay');
-        if (overlay && licenseStatus === 'demo') overlay.style.display = 'flex';
-        return;
-      }
+
+    // popup con bottone
+    const want = confirm(
+      "In modalità DEMO puoi inviare solo messaggi di testo.\n\n" +
+      "Vuoi acquistare la versione PRO?"
+    );
+
+    // se l’utente clicca su OK → apri il QR
+    if (want) {
+      startBitcoinPayment();
+    } else {
+      // se clicca Annulla → chiudi solo il popup
+      const overlay = document.getElementById('licenseOverlay');
+      if (overlay && licenseStatus === 'demo') overlay.style.display = 'flex';
+    }
+
+    return;
+}
+
       if (!isConnected||!e2e.ready) return alert('Non connesso al server o E2E non pronto');
 
       try{
