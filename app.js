@@ -53,24 +53,53 @@ console.log("INSTALL ID:", install_id);
   let licensePollTimer = null;
   let lastLicensePayload = null;
 
-  async function fetchLicenseStatus(showErrors) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/license/status?install_id=${encodeURIComponent(INSTALL_ID)}`);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const prevStatus = licenseStatus;
-      licenseStatus = data.status;
-      lastLicensePayload = data;
-      updateLicenseOverlay();
-      if (prevStatus !== 'pro' && licenseStatus === 'pro') {
-        console.info('Licenza PRO attivata');
+   async function fetchLicenseStatus(showErrors) {
+  try {
+    const url = `${API_BASE_URL}/license/status?install_id=${encodeURIComponent(INSTALL_ID)}`;
+    const res = await fetch(url, { credentials: 'include' });
+
+    if (!res.ok) {
+      console.warn("HTTP NON OK:", res.status);
+
+      if (res.status === 403) {
+        // licenza non valida
+        licenseStatus = "expired";
+        updateLicenseOverlay();
       }
-    } catch (err) {
-      if (showErrors) {
-        console.error('Errore fetch /license/status', err);
-      }
+
+      throw new Error("HTTP " + res.status);
     }
+
+    // Risposta valida
+    const data = await res.json();
+
+    // Salva stato precedente per capire se siamo passati a PRO
+    const prevStatus = licenseStatus;
+
+    // Aggiorna stato licenza
+    licenseStatus = data.status;              // 'trial' / 'pro' / 'expired'
+    lastLicensePayload = data;
+
+    // Aggiorna overlay grafico
+    updateLicenseOverlay();
+
+    // Se passo da trial → PRO aggiorno UI
+    if (prevStatus !== "pro" && licenseStatus === "pro") {
+      console.info("Licenza PRO attivata");
+      const demoBadge = document.getElementById("demo-badge");
+      demoBadge && demoBadge.setAttribute("hidden", "");
+    }
+
+    return data;
+
+  } catch (err) {
+    if (showErrors) {
+      console.error("Errore fetch /license/status", err);
+    }
+    return null;
   }
+}
+
 
   function isFeatureAllowed(feature) {
     if (licenseStatus === 'pro') return true;
