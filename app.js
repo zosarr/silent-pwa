@@ -1433,62 +1433,7 @@ if (buyBtn) buyBtn.onclick = showBitcoinQrOnly;
 // ==============================
 //      FUNZIONE CORRETTA
 // ==============================
-async function showBitcoinQrOnly() {
-  try {
-    const install_id = localStorage.getItem("install_id");
 
-    const res = await fetch(
-      `https://api.silentpwa.com/payment/start?install_id=${install_id}`,
-      { method: "POST" }
-    );
-
-    const data = await res.json();
-    const btcAddr = data.btc_address;
-    const amount = data.amount_btc;
-
-    // Mostra overlay pagamento
-    const ov = document.getElementById("licenseOverlay");
-    ov.style.display = "flex";
-
-    // QR dinamico
-    document.getElementById("licenseQr").src =
-      `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:${btcAddr}?amount=${amount}`;
-
-    // Mostra indirizzo e importo
-    document.getElementById("licenseAddr").textContent = btcAddr;
-    document.getElementById("licenseAmount").textContent = amount + " BTC";
-
-    pollPaymentStatus();
-
-  } catch (err) {
-    console.error("Errore pagamento BTC", err);
-    alert("Errore rete durante pagamento Bitcoin.");
-  }
-}
-
-
-document.addEventListener('DOMContentLoaded', initLicense);
-
-
-
-function pollPaymentStatus() {
-  const install_id = localStorage.getItem("install_id");
-  const timer = setInterval(async () => {
-    try {
-      const res = await fetch(`https://api.silentpwa.com/payment/status?install_id=${install_id}`);
-      const data = await res.json();
-
-      if (data.status === "pro") {
-        clearInterval(timer);
-        alert("Pagamento ricevuto! Licenza PRO attivata.");
-        const ov = document.getElementById('licenseOverlay');
-        ov.style.display = "none";
-        location.reload();
-      }
-
-    } catch (e) {}
-  }, 5000);
-}
 function showBitcoinQrOnly() {
   const addr = "15Vf5fmhY4uihXWkSvd91aSsDaiZdUkVN8";
 
