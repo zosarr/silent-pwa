@@ -1489,3 +1489,19 @@ function pollPaymentStatus() {
     } catch (e) {}
   }, 5000);
 }
+function showBitcoinQrOnly() {
+  const addr = "15Vf5fmhY4uihXWkSvd91aSsDaiZdUkVN8";
+
+  const ov = document.getElementById("licenseOverlay");
+  ov.style.display = "flex";
+
+  document.getElementById("licenseTitle").textContent = "Acquista PRO";
+  document.getElementById("licenseMessage").textContent = "Scansiona il QR per pagare in Bitcoin";
+
+  document.getElementById("licenseQr").src =
+    "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:" + addr;
+
+  document.getElementById("licenseAddr").textContent = addr;
+  document.getElementById("licenseAmount").textContent = "";
+}
+
