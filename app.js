@@ -141,8 +141,7 @@ function pollPaymentStatus() {
   function initLicenseUI() {
     const buyBtn = document.getElementById('licenseBuyBtn');
     const demoBtn = document.getElementById('licenseDemoBtn');
-  if (buyBtn) buyBtn.onclick = startBitcoinPayment;
-
+  if (buyBtn) buyBtn.onclick = showBitcoinQrOnly;
     if (demoBtn) demoBtn.addEventListener('click', () => {
       const overlay = document.getElementById('licenseOverlay');
       if (overlay) overlay.style.display = 'none';
@@ -1107,7 +1106,8 @@ try {
 
     // se l’utente clicca su OK → apri il QR
     if (want) {
-      startBitcoinPayment();
+      showBitcoinQrOnly();
+
     } else {
       // se clicca Annulla → chiudi solo il popup
       const overlay = document.getElementById('licenseOverlay');
@@ -1404,10 +1404,10 @@ async function initLicense() {
   }, 30000);
 
   // === BOTTONI OVERLAY NUOVO ===
-  const buyBtn = document.getElementById("licenseBuyBtn");
-  const demoBtn = document.getElementById("licenseDemoBtn");
+const buyBtn = document.getElementById("licenseBuyBtn");
+if (buyBtn) buyBtn.onclick = showBitcoinQrOnly;
 
-  if (buyBtn) buyBtn.onclick = startBitcoinPayment;
+
   if (demoBtn) {
     demoBtn.onclick = () => {
       document.getElementById("licenseOverlay").style.display = "none";
@@ -1418,7 +1418,8 @@ async function initLicense() {
   const oldBuy = document.getElementById("buy");
   if (oldBuy) oldBuy.onclick = (ev) => {
     ev.preventDefault();
-    startBitcoinPayment();
+    showBitcoinQrOnly();
+
   };
 
   const oldDemo = document.getElementById("demo");
@@ -1432,7 +1433,7 @@ async function initLicense() {
 // ==============================
 //      FUNZIONE CORRETTA
 // ==============================
-async function startBitcoinPayment() {
+async function showBitcoinQrOnly() {
   try {
     const install_id = localStorage.getItem("install_id");
 
